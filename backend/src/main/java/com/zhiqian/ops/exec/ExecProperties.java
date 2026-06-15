@@ -1,21 +1,23 @@
 package com.zhiqian.ops.exec;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 /**
- * 执行器配置（最小权限原则）。
+ * 绑定 application.yml 中的 ops.exec.* 配置。
  */
+@Component
 @ConfigurationProperties(prefix = "ops.exec")
 public class ExecProperties {
-    /** 受限运维账户，非必要不用 root。 */
+    /** 以哪个受限账号执行（最小权限，避免 root）。 */
     private String runAsUser = "opsagent";
-    /** 是否通过 sudo -u 切换到受限账户执行。 */
+    /** 是否通过 sudo -u 降权执行。 */
     private boolean useSudo = false;
-    /** 单条命令超时（秒）。 */
+    /** 单条命令执行超时（秒）。 */
     private int timeoutSeconds = 20;
     /** 工作目录。 */
     private String workingDir = "/tmp";
-    /** 演示安全模式：true 时高危变更不真正落盘。 */
+    /** 干跑模式：对变更类命令不真正执行，保障演示安全。 */
     private boolean dryRun = true;
 
     public String getRunAsUser() { return runAsUser; }

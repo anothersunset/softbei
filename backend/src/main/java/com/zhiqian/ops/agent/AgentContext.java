@@ -4,8 +4,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Agent 上下文（沿用原 智迁云枢 com.zhiqian.agent.AgentContext 设计）。
- * state() 用于跨节点传递中间结果，memory() 用于保存会话级记忆。
+ * 一次运维会话的上下文（沿用原项目设计）。
+ * state 保存跨节点传递的状态（如 traceId、感知结果、推理计划），
+ * memory 保存可复用的上下文记忆。
  */
 public class AgentContext {
     private final Long taskId;
@@ -22,9 +23,4 @@ public class AgentContext {
     public Long projectId() { return projectId; }
     public Map<String, Object> state() { return state; }
     public Map<String, Object> memory() { return memory; }
-
-    public String traceId() {
-        Object v = state.get("traceId");
-        return v == null ? null : v.toString();
-    }
 }

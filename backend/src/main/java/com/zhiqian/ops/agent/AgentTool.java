@@ -3,16 +3,16 @@ package com.zhiqian.ops.agent;
 import java.util.Map;
 
 /**
- * Agent 可调用工具接口（沿用原 智迁云枢 com.zhiqian.agent.AgentTool 签名）。
- * 本项目中每个运维感知/动作都封装为一个 AgentTool，并通过 MCP 暴露。
+ * Agent 工具抽象（沿用原项目接口形状）。
+ * 每个运维动作都被封装为一个 Tool，通过 MCP 插件化暴露。
  */
 public interface AgentTool {
-    /** 工具唯一名称（MCP tool name）。 */
+    /** 工具唯一名称（也是 MCP tool name）。 */
     String name();
 
-    /** 供大模型理解的工具描述。 */
+    /** 工具用途描述（供模型与 MCP 客户端理解）。 */
     String description();
 
-    /** 执行工具，返回结果 map。 */
+    /** 执行工具，返回结构化结果。 */
     Map<String, Object> run(AgentContext ctx, Map<String, Object> input);
 }

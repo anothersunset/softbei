@@ -1,7 +1,7 @@
 package com.zhiqian.ops.common;
 
 /**
- * 统一响应包装（沿用原项目 common/Result 设计）。
+ * 统一 API 返回封装（沿用原项目设计）。
  */
 public class Result<T> {
     private int code;
@@ -21,7 +21,7 @@ public class Result<T> {
     }
 
     public static <T> Result<T> ok() {
-        return ok(null);
+        return new Result<>(0, "ok", null);
     }
 
     public static <T> Result<T> error(int code, String message) {

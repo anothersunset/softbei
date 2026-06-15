@@ -9,9 +9,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 顺序执行一组 AgentNode，逐节点计时并生成 AgentStep 回调。
- * 沿用原 智迁云枢 AgentRunner 的「run(graph, ctx, onStep)」模式：
- * 逐步记录 model/confidence/tokens/elapsed/status，作为推理链路溯源骨架。
+ * Agent 运行器（忠实沿用原项目「逐节点迭代 + onStep 回调记录」模式）。
+ * 为每个节点计时、构造 AgentStep、并在 _halt 为 true 时短路。
  */
 @Component
 public class AgentRunner {
@@ -19,32 +18,32 @@ public class AgentRunner {
     public List<AgentStep> run(List<AgentNode> nodes, AgentContext ctx, Consumer<AgentStep> onStep) {
         List<AgentStep> steps = new ArrayList<>();
         for (AgentNode node : nodes) {
-            long t0 = System.currentTimeMillis();
+            long start = System.currentTimeMillis();
             Map<String, Object> out;
-            String status;
+            String status = "ok";
             try {
                 out = node.run(ctx);
                 if (out == null) {
                     out = new HashMap<>();
                 }
-                status = String.valueOf(out.getOrDefault("_status", "success"));
             } catch (Exception e) {
                 out = new HashMap<>();
-                out.put("error", String.valueOf(e.getMessage()));
+                out.put("error", e.getMessage());
                 status = "error";
             }
-            long elapsed = System.currentTimeMillis() - t0;
+            long elapsed = System.currentTimeMillis() - start;
+            String finalStatus = out.containsKey("error") ? "error" : str(out.getOrDefault("_status", status));
             AgentStep step = new AgentStep(
                     node.stage(),
                     node.agentName(),
-                    new HashMap<>(ctx.state()),
+                    new HashMap<>(),
                     out,
-                    asStr(out.get("_model")),
-                    asDouble(out.get("_confidence")),
+                    str(out.get("_model")),
+                    dbl(out.get("_confidence")),
                     elapsed,
-                    asInt(out.get("_tokenIn")),
-                    asInt(out.get("_tokenOut")),
-                    status
+                    intg(out.get("_tokenIn")),
+                    intg(out.get("_tokenOut")),
+                    finalStatus
             );
             steps.add(step);
             if (onStep != null) {
@@ -57,7 +56,17 @@ public class AgentRunner {
         return steps;
     }
 
-    private String asStr(Object o) { return o == null ? null : o.toString(); }
-    private Double asDouble(Object o) { return (o instanceof Number n) ? n.doubleValue() : null; }
-    private Integer asInt(Object o) { return (o instanceof Number n) ? n.intValue() : null; }
+    private String str(Object o) { return o == null ? null : String.valueOf(o); }
+
+    private Double dbl(Object o) {
+        if (o instanceof Number n) { return n.doubleValue(); }
+        if (o instanceof String s) { try { return Double.parseDouble(s); } catch (Exception ignored) {} }
+        return null;
+    }
+
+    private Integer intg(Object o) {
+        if (o instanceof Number n) { return n.intValue(); }
+        if (o instanceof String s) { try { return Integer.parseInt(s); } catch (Exception ignored) {} }
+        return null;
+    }
 }
