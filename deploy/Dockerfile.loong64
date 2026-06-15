@@ -1,0 +1,27 @@
+# 面向 LoongArch (loong64) + 麒麟高级服务器版 V11 的构建镜像
+# 优先选用国产基础镜像与国产 JDK（欕峰 BiSheng / Loongson JDK）。
+# 构建阶段：使用 Maven 编译（可替换为离线仓库）
+FROM openeuler/openeuler:22.03-lts AS build
+ENV LANG=C.UTF-8
+RUN set -eux; \
+    yum install -y java-17-openjdk-devel maven || \
+    (echo "请根据麒麟/龙芯离线源安装 JDK17 与 Maven" && exit 1)
+WORKDIR /build
+COPY backend/pom.xml ./pom.xml
+RUN mvn -q -B dependency:go-offline || true
+COPY backend/src ./src
+RUN mvn -q -B clean package -DskipTests
+
+# 运行阶段
+FROM openeuler/openeuler:22.03-lts
+ENV LANG=C.UTF-8 TZ=Asia/Shanghai
+RUN set -eux; \
+    yum install -y java-17-openjdk-headless procps-ng iproute util-linux systemd shadow-utils sudo || true; \
+    useradd -r -m -s /sbin/nologin opsagent || true
+WORKDIR /app
+COPY --from=build /build/target/*.jar /app/ops-agent.jar
+COPY deploy/scripts/ /app/scripts/
+EXPOSE 8080
+# 默认以受限账号运行服务进程（最小权限）
+USER opsagent
+ENTRYPOINT ["java", "-jar", "/app/ops-agent.jar"]

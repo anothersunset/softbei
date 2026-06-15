@@ -1,0 +1,10 @@
+# 最小权限 sudoers 白名单：仅允许 opsagent 免密执行受控的运维命令。
+# 注意：路径需与实际发行版一致（麒麟 V11），请用 which 确认后调整。
+# 该白名单与应用层 IntentRiskGuard 形成双重防护：即使应用被绕过，OS 层仍限制可执行范围。
+Defaults:opsagent !requiretty
+
+# 只读/感知类（安全）
+opsagent ALL=(root) NOPASSWD: /usr/bin/journalctl, /usr/bin/ss, /usr/bin/lsof, /usr/bin/df, /usr/bin/du, /usr/bin/ps, /usr/bin/free, /usr/bin/netstat
+
+# 受控变更类（需应用层 REVIEW 通过后才会调用；如不需要可注释掉）
+opsagent ALL=(root) NOPASSWD: /usr/bin/systemctl status *, /usr/bin/systemctl restart *

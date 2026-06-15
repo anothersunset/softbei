@@ -1,0 +1,24 @@
+# LoongArch + 麒麟 V11 部署编排
+version: "3.8"
+services:
+  ops-agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.loong64
+    image: opsguard-agent:loong64
+    container_name: opsguard-agent
+    ports:
+      - "8080:8080"
+    environment:
+      # 默认 mock 推理，无需外部依赖即可演示；接入国产模型时修改以下变量
+      OPS_LLM_PROVIDER: mock
+      OPS_LLM_BASE-URL: https://api.deepseek.com
+      OPS_LLM_MODEL: deepseek-chat
+      OPS_LLM_API-KEY: ""
+      # 生产环境如需真实执行，请谨慎关闭 dry-run 并配置最小权限 sudoers
+      OPS_EXEC_DRY-RUN: "true"
+      OPS_EXEC_USE-SUDO: "false"
+      OPS_EXEC_RUN-AS-USER: opsagent
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
