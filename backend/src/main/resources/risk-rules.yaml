@@ -1,0 +1,119 @@
+# 安全规则库（可热配置）—— 意图风险校验器的「二次过滤」依据
+guard:
+  # 一级红线：匹配即 BLOCK，永不执行
+  blockedPatterns:
+    - pattern: "(^|\\s)rm\\s+(-[a-zA-Z]*\\s+)*-?[a-zA-Z]*r[a-zA-Z]*f|(^|\\s)rm\\s+-rf\\s+/"
+      reason: "递归强制删除（rm -rf），极高风险"
+    - pattern: "(^|\\s):\\(\\)\\s*\\{\\s*:\\|:&\\s*\\};:"
+      reason: "Fork 炸弹"
+    - pattern: "(^|\\s)mkfs(\\.|\\s)"
+      reason: "格式化文件系统"
+    - pattern: "(^|\\s)dd\\s+.*of=/dev/"
+      reason: "直写块设备，可覆盖磁盘"
+    - pattern: "(^|\\s)(shutdown|reboot|halt|poweroff|init\\s+0)\\b"
+      reason: "系统关机/重启"
+    - pattern: ">\\s*/etc/(passwd|shadow|fstab|sudoers)"
+      reason: "覆写系统关键配置文件"
+    - pattern: "(^|\\s)chmod\\s+(-R\\s+)?0?777\\s+/"
+      reason: "对根/系统目录赋 777 权限"
+    - pattern: "(^|\\s)chown\\s+-R\\s+\\S+\\s+/(\\s|$)"
+      reason: "递归变更根目录属主"
+
+  # 含 shell 元字符的指令一律 BLOCK，防止命令拼接与注入
+  blockedMetacharacters:
+    - "|"
+    - ";"
+    - "&"
+    - "`"
+    - "$("
+    - "${"
+    - ">"
+    - "<"
+    - "\n"
+
+  # 关键路径：若变更类指令触及，升级为 BLOCK（包括数据库数据目录）
+  criticalPaths:
+    - "/"
+    - "/etc"
+    - "/boot"
+    - "/dev"
+    - "/proc"
+    - "/sys"
+    - "/usr"
+    - "/bin"
+    - "/sbin"
+    - "/lib"
+    - "/lib64"
+    - "/var/lib/mysql"
+    - "/var/lib/pgsql"
+    - "/var/lib/postgresql"
+    - "/var/lib/docker"
+    - "/data"
+
+  # 变更类二进制：需人工确认（REVIEW）
+  reviewBinaries:
+    - rm
+    - rmdir
+    - kill
+    - killall
+    - pkill
+    - systemctl
+    - service
+    - chmod
+    - chown
+    - chgrp
+    - mv
+    - mount
+    - umount
+    - truncate
+    - tee
+    - iptables
+    - nft
+    - useradd
+    - userdel
+    - passwd
+
+  # 只读/感知类白名单：安全（SAFE）
+  readOnlyBinaries:
+    - ls
+    - cat
+    - head
+    - tail
+    - df
+    - du
+    - free
+    - ps
+    - top
+    - ss
+    - netstat
+    - journalctl
+    - lsof
+    - uptime
+    - uname
+    - stat
+    - grep
+    - find
+    - who
+    - w
+    - vmstat
+    - iostat
+    - date
+    - hostname
+    - whoami
+    - id
+    - dmesg
+
+  # 提示词注入识别模式（中英文，大小写不敏感）
+  injectionPatterns:
+    - "ignore\\s+(all\\s+)?(the\\s+)?previous\\s+(instructions|prompts|rules)"
+    - "disregard\\s+(all\\s+)?(previous|above|prior)"
+    - "forget\\s+(all\\s+)?(previous|your)\\s+(instructions|rules)"
+    - "you\\s+are\\s+now\\s+(a|an|in)"
+    - "(reveal|print|show)\\s+(your\\s+)?(system\\s+prompt|instructions)"
+    - "developer\\s+mode"
+    - "忽略.*(之前|上述|以上|前面).*(指令|提示|规则|设定)"
+    - "忽视.*(安全|护栏|限制|校验)"
+    - "你现在是"
+    - "跳过.*(安全|校验|确认)"
+    - "以\\s*root\\s*(身份|权限)?\\s*(执行|运行)"
+    - "直接执行.*不要.*(校验|确认|问)"

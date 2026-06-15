@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ops-agent
+
+# 大模型选型：provider=mock 可离线演示；provider=deepseek 接入真实国产模型
+ops:
+  llm:
+    provider: ${OPS_LLM_PROVIDER:mock}
+    base-url: ${OPS_LLM_BASE_URL:https://api.deepseek.com}
+    model: ${OPS_LLM_MODEL:deepseek-chat}
+    api-key: ${OPS_LLM_API_KEY:}
+    timeout-seconds: 60
+  exec:
+    # 最小权限：核心运维动作在受限账户下执行，非必要不用 root
+    run-as-user: ${OPS_EXEC_USER:opsagent}
+    use-sudo: ${OPS_EXEC_USE_SUDO:false}
+    timeout-seconds: 20
+    working-dir: ${OPS_EXEC_WORKDIR:/tmp}
+    # 演示模式：true 时不真正落盘执行高危变更，仅记录（默认安全）
+    dry-run: ${OPS_EXEC_DRY_RUN:true}
+  trace:
+    file: ${OPS_TRACE_FILE:logs/ops-trace.jsonl}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.zhiqian.ops: INFO
