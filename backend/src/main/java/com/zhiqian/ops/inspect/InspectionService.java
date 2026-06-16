@@ -236,7 +236,7 @@ public class InspectionService {
             switch (f.severity()) {
                 case "CRITICAL" -> score -= 25;
                 case "WARN" -> score -= 10;
-                case "UNKNOWN" -> score -= 3;
+                case "UNKNOWN" -> score -= 8;
                 default -> { }
             }
         }
@@ -245,72 +245,19 @@ public class InspectionService {
 
     private String overall(List<InspectionFinding> findings) {
         boolean warn = false;
+        int unknown = 0;
         for (InspectionFinding f : findings) {
             if ("CRITICAL".equals(f.severity())) return "CRITICAL";
             if ("WARN".equals(f.severity())) warn = true;
+            if ("UNKNOWN".equals(f.severity())) unknown++;
         }
-        return warn ? "WARNING" : "HEALTHY";
-    }
-
-    private String buildSummary(List<InspectionFinding> findings, String overall, int score) {
-        List<String> alerts = new ArrayList<>();
-        for (InspectionFinding f : findings) {
-            if ("CRITICAL".equals(f.severity()) || "WARN".equals(f.severity())) {
-                alerts.add(f.title() + "=" + f.observed() + "(" + f.severity() + ")");
-            }
+        if (warn) return "WARNING";
+        // 安全修复(P2)：存在无法采集的指标时不能直接判定 HEALTHY。
+        // 过半指标缺失视为数据不可信(DEGRADED)，仅个别缺失时给出 WARNING 提示。
+        if (unknown > 0) {
+            return unknown * 2 >= findings.size() ? "DEGRADED" : "WARNING";
         }
-        String head = "健康评分 " + score + "/100，总体状态 " + overall + "。";
-        if (alerts.isEmpty()) {
-            return head + "本轮巡检未发现需要关注的风险项。";
-        }
-        return head + "需关注：" + String.join("；", alerts) + "。";
+        return "HEALTHY";
     }
 
-    // ---------- 工具方法 ----------
-
-    private ExecResult run(List<String> argv) {
-        try {
-            return executor.runReadOnly(argv);
-        } catch (Exception e) {
-            return new ExecResult(-1, "", e.getMessage(), false, 0);
-        }
-    }
-
-    private boolean ok(ExecResult r) {
-        return r != null && r.exitCode() == 0 && r.stdout() != null && !r.stdout().isBlank();
-    }
-
-    private InspectionFinding unknown(String id, String category, String title, String reason) {
-        return new InspectionFinding(id, category, "UNKNOWN", title, "-", "数据不可用", "-", reason,
-                "该指标在当前环境无法采集(可能命令缺失)，请在目标麒麟/LoongArch 主机复测");
-    }
-
-    private int parsePercent(String s) {
-        try {
-            return Integer.parseInt(s.replace("%", "").trim());
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    private long parseLong(String s) {
-        try {
-            return Long.parseLong(s.trim());
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    private double parseLoad1(String uptimeOut) {
-        int idx = uptimeOut.indexOf("load average:");
-        if (idx < 0) return -1;
-        String rest = uptimeOut.substring(idx + "load average:".length()).trim();
-        String[] parts = rest.split(",");
-        if (parts.length == 0) return -1;
-        try {
-            return Double.parseDouble(parts[0].trim());
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-}
+    private String buildSummary(List<InspectionFinding> findings, String over

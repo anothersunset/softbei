@@ -74,10 +74,15 @@ public class OpsPipeline {
         boolean confirm = req.isConfirm();
         ChatResponse resp = new ChatResponse();
 
-        // 人工确认执行路径：复用缓存的计划，仅重跑校验+执行+分析
+        // 人工确认执行路径：复用缓存的计划，仅重跑感知+检索+校验+执行+分析
         if (confirm && req.getTraceId() != null && planCache.containsKey(req.getTraceId())) {
             return runConfirmed(req.getTraceId(), resp);
         }
+
+        // 安全修复(P0)：confirm 仅在命中「已缓存的待确认计划」时才生效。
+        // 否则一律视为未确认，防止首次请求直接携带 confirm=true（或伪造 traceId）
+        // 绕过 REVIEW 人工确认门禁、把变更类指令直接推到执行阶段。
+        confirm = false;
 
         OpsTrace trace = audit.newTrace(instruction);
         resp.setTraceId(trace.getTraceId());
@@ -104,9 +109,13 @@ public class OpsPipeline {
         ctx.state().put("traceId", traceId);
         ctx.state().put("instruction", cached.instruction);
         ctx.state().put("confirm", true);
+        // 复用首轮已被审阅过的计划，不重新推理（保证人工确认执行的就是被审阅的同一计划）。
         ctx.state().put("plan", cached.plan);
 
-        List<AgentNode> nodes = List.of(new GuardNode(), new ExecuteNode(), new AnalyzeNode());
+        // 安全修复(P1)：重跑「感知 + 检索」节点，补全确认执行后处置报告的「感知证据 / 知识依据」，
+        // 避免确认链路只剩 校验/执行/分析 三步、retrieval=0 的断层问题。
+        List<AgentNode> nodes = List.of(
+                new SenseNode(), new RetrieveNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
         List<AgentStep> steps = runner.run(nodes, ctx, s -> audit.appendStep(traceId, s));
         resp.setSteps(steps);
         finalize(ctx, resp, cached.instruction, true);
@@ -148,7 +157,7 @@ public class OpsPipeline {
         String message;
         if (injectionBlocked) {
             status = "INJECTION_BLOCKED";
-            message = "检测到提示词注入，已在入口拦截，未执行任何操作。";
+            message = "检测到提示词注入或高危恶意意图特征，已在入口拦截，未执行任何操作。";
         } else if (worst == RiskLevel.BLOCK) {
             status = "BLOCKED";
             message = "计划中含有命中红线的高危指令，已拒绝执行。";

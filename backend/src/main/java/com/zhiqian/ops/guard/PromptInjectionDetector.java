@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * 抗注入能力：识别提示词注入（Prompt Injection），
+ * 抗注入 / 高危意图入口检测：识别提示词注入（Prompt Injection）、越权诱导，
+ * 以及反弹 shell、base64 解码执行、写 sudoers 免密等典型恶意/混淆输入特征，
  * 防止攻击者通过对话诱导 Agent 绕过安全护栏执行恶意操作。
  */
 @Component
@@ -34,6 +35,6 @@ public class PromptInjectionDetector {
         }
         boolean blocked = !matched.isEmpty();
         return new InjectionResult(blocked, matched,
-                blocked ? "检测到疑似提示词注入特征，已拒绝执行" : null);
+                blocked ? "检测到提示词注入 / 越权诱导 / 高危命令特征，已在入口侧拦截" : null);
     }
 }

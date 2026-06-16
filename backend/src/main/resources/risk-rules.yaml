@@ -18,6 +18,10 @@ guard:
       reason: "对根/系统目录赋 777 权限"
     - pattern: "(^|\\s)chown\\s+-R\\s+\\S+\\s+/(\\s|$)"
       reason: "递归变更根目录属主"
+    - pattern: "(^|\\s)passwd\\b[^\\n]*\\broot\\b"
+      reason: "篡改 root 账户口令，可导致提权/失控"
+    - pattern: "(^|\\s)systemctl\\s+(stop|disable|mask)\\s+(firewalld|iptables|nftables|ufw)\\b"
+      reason: "停用主机安全防护组件（防火墙）"
 
   # 含 shell 元字符的指令一律 BLOCK，防止命令拼接与注入
   blockedMetacharacters:
@@ -103,7 +107,7 @@ guard:
     - id
     - dmesg
 
-  # 提示词注入识别模式（中英文，大小写不敏感）
+  # 提示词注入 / 高危恶意意图识别模式（中英文，大小写不敏感）
   injectionPatterns:
     - "ignore\\s+(all\\s+)?(the\\s+)?previous\\s+(instructions|prompts|rules)"
     - "disregard\\s+(all\\s+)?(previous|above|prior)"
@@ -117,3 +121,10 @@ guard:
     - "跳过.*(安全|校验|确认)"
     - "以\\s*root\\s*(身份|权限)?\\s*(执行|运行)"
     - "直接执行.*不要.*(校验|确认|问)"
+    - "(扮演|假装|装作).{0,20}(没有|无|不受).{0,8}(限制|约束|管控)"
+    - "(扮演|假装|装作).{0,16}(运维|管理员|root|超人|超级|助手)"
+    - "忽略.{0,8}(安全|策略|防护|护栏|校验)"
+    - "NOPASSWD"
+    - "(写入|修改|追加|添加|加).{0,10}/etc/sudoers"
+    - "(反弹|reverse)\\s*shell|/dev/tcp/"
+    - "base64\\s+(-d|--?decode)"
