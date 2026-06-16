@@ -168,6 +168,13 @@
     color:var(--dim);border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer;font-family:inherit;transition:.18s}
   .exptools button:hover{border-color:color-mix(in srgb,var(--accent) 50%,var(--line));color:var(--text)}
   .exptools button svg{width:14px;height:14px}
+  .gauge{display:flex;align-items:center;gap:16px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);margin-bottom:16px}
+  .gauge .score{font-size:34px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;min-width:64px;text-align:center}
+  .gauge .score small{display:block;font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint);margin-top:5px;font-weight:600}
+  .gauge.safe .score{color:var(--safe)} .gauge.review .score{color:var(--review)} .gauge.block .score{color:var(--block)}
+  .gauge .gi{flex:1;min-width:0}
+  .gauge .gi .ov{font-size:14px;font-weight:600;letter-spacing:.4px}
+  .gauge .gi .gs{font-size:12.5px;color:var(--dim);margin-top:5px;line-height:1.6}
   .rep{border:1px solid var(--line);border-radius:11px;background:var(--surface-2);margin-bottom:13px;overflow:hidden}
   .rep .rh{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
   .rep .rh .idx{width:20px;height:20px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;font-size:11px;color:var(--accent);flex-shrink:0;font-variant-numeric:tabular-nums}
@@ -244,6 +251,7 @@
           <div class="tab on" data-tab="result" onclick="switchTab('result')">决策结果</div>
           <div class="tab" data-tab="trace" onclick="switchTab('trace')">推理链路溯源</div>
           <div class="tab" data-tab="report" onclick="switchTab('report')">处置报告</div>
+          <div class="tab" data-tab="inspect" onclick="switchTab('inspect')">主动巡检</div>
           <div class="tab" data-tab="raw" onclick="switchTab('raw')">原始响应</div>
         </div>
         <div class="cb">
@@ -264,6 +272,13 @@
               </div>
               <div id="reportBox"></div>
             </div>
+          </div>
+          <div id="tab-inspect" style="display:none">
+            <div class="exptools">
+              <button onclick="runInspect()"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>立即巡检</button>
+            </div>
+            <div class="empty" id="inspectEmpty">点击「立即巡检」对系统做一次只读体检：磁盘 / 内存 / 负载 / 进程 / 端口 / 错误日志，输出健康评分与风险预警（只读，不触发任何变更）。支持定时自动巡检（默认关闭）。</div>
+            <div id="inspectBox" style="display:none"></div>
           </div>
           <div id="tab-raw" style="display:none"><pre class="raw" id="rawBox">暂无数据</pre></div>
         </div>
@@ -606,8 +621,42 @@ function printReport(){
   setTimeout(function(){w.focus();w.print()},300);
 }
 
+async function runInspect(){
+  $('inspectEmpty').style.display='none';$('inspectBox').style.display='block';
+  $('inspectBox').innerHTML='<div class="empty">巡检中…正在执行只读体检</div>';
+  try{
+    const r=await fetch('/api/ops/inspect',{method:'POST'});
+    const resp=await r.json();const d=(resp&&resp.data)?resp.data:resp;
+    renderInspect(d);
+  }catch(e){
+    $('inspectBox').innerHTML='<div class="statbar block"><span class="sig"></span><span class="stt">巡检失败</span><span class="msg">'+esc(e.message)+'（请确认后端已启动）</span></div>';
+  }
+}
+function sevClass(s){s=(s||'').toString().toUpperCase();if(s==='CRITICAL')return 'block';if(s==='WARN')return 'review';if(s==='OK')return 'safe';return 'gray';}
+function renderInspect(d){
+  const score=pick(d,['healthScore']);
+  const overall=(pick(d,['overall'])||'').toString().toUpperCase();
+  const summary=pick(d,['summary'])||'';
+  const findings=pick(d,['findings'])||[];
+  const sources=pick(d,['sources'])||[];
+  const tid=pick(d,['traceId'])||'';
+  var oCls=overall==='HEALTHY'?'safe':(overall==='WARNING'?'review':'block');
+  var oName=overall==='HEALTHY'?'健康':(overall==='WARNING'?'存在告警':(overall==='CRITICAL'?'严重风险':overall||'-'));
+  var html='<div class="gauge '+oCls+'"><div class="score">'+esc(score==null?'-':score)+'<small>SCORE</small></div><div class="gi"><div class="ov">总体状态 · '+esc(oName)+'</div><div class="gs">'+esc(summary)+(tid?'<br><span class="mono" style="color:var(--faint)">Trace '+esc(tid)+'</span>':'')+'</div></div></div>';
+  html+='<div class="sec"><div class="lbl">'+ICONS.SENSE+'巡检明细 · 风险预警</div>';
+  findings.forEach(function(f){
+    var sev=(pick(f,['severity'])||'').toString().toUpperCase();
+    var title=pick(f,['title'])||'';var obs=pick(f,['observed'])||'';var thr=pick(f,['threshold'])||'';
+    var ev=pick(f,['evidence'])||'';var sug=pick(f,['suggestion'])||'';
+    html+='<div class="dec"><div class="top"><code>'+esc(asText(title))+'：'+esc(asText(obs))+'</code><span class="badge '+sevClass(sev)+'">'+esc(sev||'-')+'</span></div>'+(thr&&thr!=='仅供参考'?'<div class="rule">阈值：'+esc(asText(thr))+'</div>':'')+(ev&&ev!=='-'?'<div class="why">'+esc(asText(ev))+'</div>':'')+((sev!=='OK'&&sug)?'<div class="why">建议：'+esc(asText(sug))+'</div>':'')+'</div>';
+  });
+  html+='</div>';
+  if(sources.length){html+='<div class="sec"><div class="lbl">'+ICONS.RETRIEVE+'数据源 · 只读采集</div><div class="chips">'+sources.map(function(s){return '<span class="chip"><span class="cd"></span><span class="nm">'+esc(asText(s))+'</span></span>';}).join('')+'</div></div>';}
+  $('inspectBox').innerHTML=html;
+}
+
 function switchTab(name){
-  ['result','trace','report','raw'].forEach(function(x){
+  ['result','trace','report','inspect','raw'].forEach(function(x){
     var el=$('tab-'+x);if(el)el.style.display=(x===name)?'block':'none';
   });
   var tabs=document.querySelectorAll('.tab');
