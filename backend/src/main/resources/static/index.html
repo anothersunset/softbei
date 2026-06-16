@@ -232,7 +232,7 @@
 
     <div>
       <div class="card">
-        <div class="ch"><span class="ico"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M21 12a9 9 0 1 1-9-9'/><path d='M21 3v6h-6'/></svg></span><h2>安全护栏 · 七阶段闭环</h2></div>
+        <div class="ch"><span class="ico"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M21 12a9 9 0 1 1-9-9'/><path d='M21 3v6h-6'/></svg></span><h2>安全护栏 · 八阶段闭环</h2></div>
         <div class="cb">
           <div class="loader" id="loader"><i></i></div>
           <div class="pipe" id="pipe"></div>
@@ -278,6 +278,7 @@ const ICONS={
   RECEIVE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-6l-2 3h-4l-2-3H2'/><path d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/></svg>`,
   INJECTION_GUARD:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/><path d='M12 8v4M12 16h.01'/></svg>`,
   SENSE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><path d='m21 21-4.3-4.3'/></svg>`,
+  RETRIEVE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/><path d='m13 9 2 2 3-3'/></svg>`,
   REASON:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><rect x='5' y='5' width='14' height='14' rx='2'/><rect x='9' y='9' width='6' height='6'/><path d='M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3'/></svg>`,
   GUARD:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M4 21v-6M4 11V3M12 21v-9M12 8V3M20 21v-4M20 13V3M1 15h6M9 8h6M17 17h6'/></svg>`,
   EXECUTE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M13 2 3 14h9l-1 8 10-12h-9z'/></svg>`,
@@ -286,6 +287,7 @@ const ICONS={
 };
 const STAGES=[
   {key:'RECEIVE',name:'接收'},{key:'INJECTION_GUARD',name:'抗注入'},{key:'SENSE',name:'感知'},
+  {key:'RETRIEVE',name:'检索'},
   {key:'REASON',name:'推理'},{key:'GUARD',name:'校验'},{key:'EXECUTE',name:'执行'},{key:'ANALYZE',name:'分析'}
 ];
 const SCENARIOS=[
@@ -305,6 +307,7 @@ function pick(o,keys){if(o==null)return undefined;for(const k of keys){if(o[k]!=
 function has(o,k){return o!=null&&Object.prototype.hasOwnProperty.call(o,k)&&o[k]!=null}
 function asText(v){if(v==null)return '';if(typeof v==='object')return JSON.stringify(v,null,2);return String(v)}
 function lvlClass(l){l=(l||'').toString().toUpperCase();if(l.indexOf('SAFE')>=0)return 'safe';if(l.indexOf('REVIEW')>=0)return 'review';if(l.indexOf('BLOCK')>=0)return 'block';return 'gray'}
+function kindClass(k){k=(k||'').toString().toLowerCase();if(k==='rule')return 'review';if(k==='history')return 'gray';return 'safe'}
 function vt(fn){if(document.startViewTransition){document.startViewTransition(fn)}else{fn()}}
 
 (function init(){
@@ -371,6 +374,7 @@ function render(d){
   const steps=pick(d,['steps'])||[];
   const reached=steps.map(function(s){return pick(s,['stage'])}).filter(Boolean);
   const injection=pick(d,['injection']);
+  const retrieval=pick(d,['retrieval'])||[];
   const decisions=pick(d,['decisions'])||[];
   const plan=pick(d,['plan']);
   const execResults=pick(d,['execResults'])||[];
@@ -399,6 +403,16 @@ function render(d){
     const mp=pick(injection,['matchedPatterns'])||[];
     const reason=pick(injection,['reason'])||'检测到越权/指令覆写诱导';
     html+='<div class="sec"><div class="lbl">'+ICONS.INJECTION_GUARD+'抗注入检测</div><div class="dec"><div class="top"><code>'+esc(Array.isArray(mp)?mp.join('   ·   '):asText(mp))+'</code><span class="badge block">Blocked</span></div><div class="why">'+esc(reason)+'</div></div></div>';
+  }
+
+  if(retrieval.length){
+    html+='<div class="sec"><div class="lbl">'+ICONS.RETRIEVE+'知识依据 · 引用溯源</div>';
+    retrieval.forEach(function(ev){
+      var kind=(pick(ev,['kind'])||'').toString();var src=pick(ev,['source'])||'';var title=pick(ev,['title'])||'';var snip=pick(ev,['snippet'])||'';
+      var kname=kind==='rule'?'安全规则':(kind==='history'?'历史trace':'文档/Runbook');
+      html+='<div class="dec"><div class="top"><code>'+esc(asText(title))+'</code><span class="badge '+kindClass(kind)+'">'+esc(kname)+'</span></div><div class="why">'+esc(asText(snip))+'</div>'+(src?'<div class="rule">来源：'+esc(asText(src))+'</div>':'')+'</div>';
+    });
+    html+='</div>';
   }
 
   const planSteps=plan?(pick(plan,['steps'])||[]):[];
@@ -490,6 +504,7 @@ function collectReport(d){
     traceId:pick(d,['traceId'])||'',
     sensed:sensed,
     plan:pick(d,['plan']),
+    retrieval:pick(d,['retrieval'])||[],
     decisions:pick(d,['decisions'])||[],
     execResults:pick(d,['execResults'])||[],
     analysis:pick(d,['analysis'])||'',
@@ -522,6 +537,7 @@ function renderReport(d){
     if(conf!=null)pb+='<div class="muted" style="margin-top:6px">置信度：'+esc((conf*1).toFixed(2))+'</div>';
     if(ps.length)pb+='<ul>'+ps.map(function(p){return '<li><code>'+esc(asText(pick(p,['command'])))+'</code> — '+esc(asText(pick(p,['purpose'])))+'</li>';}).join('')+'</ul>';
   }else pb='<span class="muted">未生成计划。</span>';
+  if(r.retrieval&&r.retrieval.length){pb+='<div style="margin-top:8px"><b>参考依据：</b></div><ul>'+r.retrieval.map(function(ev){var kind=(pick(ev,['kind'])||'').toString();var kname=kind==='rule'?'安全规则':(kind==='history'?'历史trace':'文档');return '<li><span class="badge '+kindClass(kind)+'">'+esc(kname)+'</span> '+esc(asText(pick(ev,['title'])))+(pick(ev,['source'])?' <span class="muted">（'+esc(asText(pick(ev,['source'])))+'）</span>':'')+'</li>';}).join('')+'</ul>';}
   h+=sec('3','模型计划',pb);
   var db='';
   if(r.decisions.length){db='<ul>'+r.decisions.map(function(x){var lvl=(pick(x,['level'])||'').toString().toUpperCase();return '<li><span class="badge '+lvlClass(lvl)+'">'+esc(lvl||'-')+'</span> <code>'+esc(asText(pick(x,['command'])))+'</code><br><span class="muted">'+esc(asText(pick(x,['reason'])||''))+'</span></li>';}).join('')+'</ul>';}
@@ -554,6 +570,7 @@ function buildReportMarkdown(d){
     if(summ)L.push(summ);if(hyp)L.push('- 根因假设：'+hyp);if(conf!=null)L.push('- 置信度：'+(conf*1).toFixed(2));
     ps.forEach(function(p){L.push('- '+q+asText(pick(p,['command']))+q+' — '+asText(pick(p,['purpose'])));});
   }else L.push('（未生成计划）');
+  if(r.retrieval&&r.retrieval.length){L.push('- 参考依据：');r.retrieval.forEach(function(ev){L.push('  - ['+(pick(ev,['source'])||pick(ev,['kind'])||'')+'] '+asText(pick(ev,['title'])));});}
   L.push('');
   L.push('## 4. 风险裁决');
   L.push('| 命令 | 级别 | 理由 |');L.push('| --- | --- | --- |');
