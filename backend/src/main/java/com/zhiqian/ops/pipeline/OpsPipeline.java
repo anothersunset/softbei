@@ -17,6 +17,8 @@ import com.zhiqian.ops.guard.RiskLevel;
 import com.zhiqian.ops.llm.LlmClient;
 import com.zhiqian.ops.llm.PlanResult;
 import com.zhiqian.ops.llm.PlanStep;
+import com.zhiqian.ops.retriever.ContextRetriever;
+import com.zhiqian.ops.retriever.Evidence;
 import com.zhiqian.ops.trace.OpsAuditService;
 import com.zhiqian.ops.trace.OpsTrace;
 import com.zhiqian.ops.trace.TraceStage;
@@ -29,7 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 安全护栏编排管线：接收指令 -> 抗注入 -> 感知环境 -> 推理决策 -> 安全校验 -> 执行 -> 根因分析。
+ * 安全护栏编排管线：接收指令 -> 抗注入 -> 感知环境 -> 知识检索 -> 推理决策 -> 安全校验 -> 执行 -> 根因分析。
  * 复用原项目 AgentRunner 「逐节点迭代 + onStep 回调」模式，每步均落盘溯源。
  */
 @Service
@@ -42,6 +44,7 @@ public class OpsPipeline {
     private final OpsAuditService audit;
     private final LeastPrivilegeExecutor executor;
     private final List<AgentTool> senseTools;
+    private final ContextRetriever retriever;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, CachedPlan> planCache = new ConcurrentHashMap<>();
 
@@ -52,7 +55,8 @@ public class OpsPipeline {
                        RootCauseAnalyzer analyzer,
                        OpsAuditService audit,
                        LeastPrivilegeExecutor executor,
-                       List<AgentTool> senseTools) {
+                       List<AgentTool> senseTools,
+                       ContextRetriever retriever) {
         this.runner = runner;
         this.injectionDetector = injectionDetector;
         this.guard = guard;
@@ -61,6 +65,7 @@ public class OpsPipeline {
         this.audit = audit;
         this.executor = executor;
         this.senseTools = senseTools;
+        this.retriever = retriever;
     }
 
     public ChatResponse chat(ChatRequest req) {
@@ -81,7 +86,7 @@ public class OpsPipeline {
         ctx.state().put("confirm", confirm);
 
         List<AgentNode> nodes = List.of(
-                new ReceiveNode(), new InjectionNode(), new SenseNode(),
+                new ReceiveNode(), new InjectionNode(), new SenseNode(), new RetrieveNode(),
                 new ReasonNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
         List<AgentStep> steps = runner.run(nodes, ctx, s -> audit.appendStep(trace.getTraceId(), s));
         resp.setSteps(steps);
@@ -130,6 +135,10 @@ public class OpsPipeline {
         Object analysis = ctx.state().get("analysis");
         if (analysis != null) {
             resp.setAnalysis(String.valueOf(analysis));
+        }
+        Object retrieval = ctx.state().get("retrieval");
+        if (retrieval instanceof List<?> list) {
+            resp.setRetrieval((List<Evidence>) list);
         }
 
         boolean injectionBlocked = Boolean.TRUE.equals(ctx.state().get("injectionBlocked"));
@@ -208,6 +217,33 @@ public class OpsPipeline {
         }
     }
 
+    /** 知识检索节点：在感知之后、推理之前，检索可引用的运维依据（文档/规则/历史）。 */
+    private class RetrieveNode implements AgentNode {
+        public String stage() { return TraceStage.RETRIEVE.name(); }
+        public String agentName() { return "ContextRetriever"; }
+        public Map<String, Object> run(AgentContext ctx) {
+            String instruction = String.valueOf(ctx.state().get("instruction"));
+            String traceId = String.valueOf(ctx.state().get("traceId"));
+            List<Evidence> evidence = retriever.retrieve(instruction, 4, traceId);
+            ctx.state().put("retrieval", evidence);
+            List<Map<String, Object>> citations = new ArrayList<>();
+            for (Evidence ev : evidence) {
+                Map<String, Object> c = new LinkedHashMap<>();
+                c.put("title", ev.title());
+                c.put("source", ev.source());
+                c.put("kind", ev.kind());
+                c.put("score", ev.score());
+                c.put("snippet", ev.snippet());
+                citations.add(c);
+            }
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("count", evidence.size());
+            out.put("citations", citations);
+            out.put("degraded", evidence.isEmpty());
+            return out;
+        }
+    }
+
     private class ReasonNode implements AgentNode {
         public String stage() { return TraceStage.REASON.name(); }
         public String agentName() { return "ReasoningAgent"; }
@@ -219,13 +255,32 @@ public class OpsPipeline {
             } catch (Exception e) {
                 sensedJson = "{}";
             }
-            String prompt = "INSTRUCTION: " + instruction + "\n\n[环境感知]\n" + sensedJson;
-            String raw = llm.chat(prompt);
+            StringBuilder prompt = new StringBuilder("INSTRUCTION: ").append(instruction)
+                    .append("\n\n[环境感知]\n").append(sensedJson);
+            // 仅在真实模型下注入检索到的依据，避免改变 Mock 的确定性回放（保障评测可复现）。
+            int evidenceUsed = 0;
+            if (llm.isReal()) {
+                Object ret = ctx.state().get("retrieval");
+                if (ret instanceof List<?> list && !list.isEmpty()) {
+                    prompt.append("\n\n[运维知识/依据]\n");
+                    int i = 1;
+                    for (Object o : list) {
+                        if (o instanceof Evidence ev) {
+                            prompt.append(i++).append(". [").append(ev.source()).append("] ")
+                                    .append(ev.title()).append(" — ").append(ev.snippet()).append("\n");
+                        }
+                    }
+                    evidenceUsed = i - 1;
+                    prompt.append("\n请优先依据以上知识与安全规则给出方案，命令需最小化、可回滚，并避免触碰关键路径。");
+                }
+            }
+            String raw = llm.chat(prompt.toString());
             PlanResult plan = parsePlan(raw);
             ctx.state().put("plan", plan);
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("summary", plan.getSummary());
             out.put("steps", plan.getSteps());
+            out.put("evidenceUsed", evidenceUsed);
             out.put("_model", llm.providerName());
             out.put("_confidence", plan.getConfidence());
             return out;

@@ -4,6 +4,7 @@ import com.zhiqian.ops.agent.AgentStep;
 import com.zhiqian.ops.guard.InjectionResult;
 import com.zhiqian.ops.guard.RiskDecision;
 import com.zhiqian.ops.llm.PlanResult;
+import com.zhiqian.ops.retriever.Evidence;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,7 @@ public class ChatResponse {
     private List<RiskDecision> decisions = new ArrayList<>();
     private List<Map<String, Object>> execResults = new ArrayList<>();
     private String analysis;
+    private List<Evidence> retrieval = new ArrayList<>();
     private List<AgentStep> steps = new ArrayList<>();
 
     public String getTraceId() { return traceId; }
@@ -39,6 +41,8 @@ public class ChatResponse {
     public void setExecResults(List<Map<String, Object>> execResults) { this.execResults = execResults; }
     public String getAnalysis() { return analysis; }
     public void setAnalysis(String analysis) { this.analysis = analysis; }
+    public List<Evidence> getRetrieval() { return retrieval; }
+    public void setRetrieval(List<Evidence> retrieval) { this.retrieval = retrieval; }
     public List<AgentStep> getSteps() { return steps; }
     public void setSteps(List<AgentStep> steps) { this.steps = steps; }
 }
