@@ -274,7 +274,6 @@
 </div>
 
 <script>
-const SVGNS="0 0 24 24";
 const ICONS={
   RECEIVE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-6l-2 3h-4l-2-3H2'/><path d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/></svg>`,
   INJECTION_GUARD:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/><path d='M12 8v4M12 16h.01'/></svg>`,
@@ -579,16 +578,30 @@ function exportReportMd(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(function(){URL.revokeObjectURL(url)},1000);
 }
-function buildReportPrintHtml(d){
-  const r=collectReport(d);
-  function s(i,t,b){return '<h2>'+i+'. '+esc(t)+'</h2><div>'+b+'</div>';}
-  var h='<h1>处置报告 · OpsGuard 智御</h1>';
-  h+='<p class="meta">状态：<b>'+esc(r.status)+'</b> ｜ '+esc(r.message)+(r.traceId?' ｜ Trace: '+esc(r.traceId):'')+'</p>';
-  h+=s('1','问题描述','<p>'+esc(r.instruction)+'</p>');
-  var sb='';if(r.sensed&&typeof r.sensed==='object'){sb='<ul>'+Object.keys(r.sensed).map(function(k){var v=r.sensed[k];var t=(typeof v==='object')?JSON.stringify(v):String(v);if(t.length>200)t=t.slice(0,200)+'…';return '<li><code>'+esc(k)+'</code>：'+esc(t)+'</li>';}).join('')+'</ul>';}else sb='<p>本次未产生显式感知数据。</p>';
-  h+=s('2','感知证据',sb);
-  var pb='';if(r.plan){var summ=pick(r.plan,['summary']);var hyp=pick(r.plan,['rootCauseHypothesis']);var conf=pick(r.plan,['confidence']);var ps=pick(r.plan,['steps'])||[];if(summ)pb+='<p>'+esc(summ)+'</p>';if(hyp)pb+='<p>根因假设：'+esc(hyp)+'</p>';if(conf!=null)pb+='<p>置信度：'+esc((conf*1).toFixed(2))+'</p>';if(ps.length)pb+='<ul>'+ps.map(function(p){return '<li><code>'+esc(asText(pick(p,['command'])))+'</code> — '+esc(asText(pick(p,['purpose'])))+'</li>';}).join('')+'</ul>';}else pb='<p>未生成计划。</p>';
-  h+=s('3','模型计划',pb);
-  var db='';if(r.decisions.length){db='<table><tr><th>命令</th><th>级别</th><th>理由</th></tr>'+r.decisions.map(function(x){return '<tr><td><code>'+esc(asText(pick(x,['command'])))+'</code></td><td>'+esc((pick(x,['level'])||'').toString())+'</td><td>'+esc(asText(pick(x,['reason'])||''))+'</td></tr>';}).join('')+'</table>';}else db='<p>无裁决记录。</p>';
-  h+=s('4','风险裁决',db);
-  var eb='';if(r.execRes
+function printReport(){
+  if(!lastResp)return;
+  var md=buildReportMarkdown(lastResp);
+  var w=window.open('','_blank');
+  if(!w){alert('请允许弹出窗口以打印 / 导出 PDF');return}
+  var css='body{font-family:-apple-system,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;color:#1a1a1a;max-width:820px;margin:32px auto;padding:0 22px;line-height:1.75;font-size:13.5px}pre{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:#1a1a1a;margin:0}';
+  w.document.write('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>处置报告 · OpsGuard 智御</title><style>'+css+'</style></head><body><pre>'+esc(md)+'</pre></body></html>');
+  w.document.close();
+  setTimeout(function(){w.focus();w.print()},300);
+}
+
+function switchTab(name){
+  ['result','trace','report','raw'].forEach(function(x){
+    var el=$('tab-'+x);if(el)el.style.display=(x===name)?'block':'none';
+  });
+  var tabs=document.querySelectorAll('.tab');
+  for(var i=0;i<tabs.length;i++){tabs[i].classList.toggle('on',tabs[i].getAttribute('data-tab')===name);}
+}
+function updateStats(){
+  $('sTotal').textContent=stats.total;
+  $('sSafe').textContent=stats.safe;
+  $('sReview').textContent=stats.review;
+  $('sBlock').textContent=stats.block;
+}
+</script>
+</body>
+</html>
