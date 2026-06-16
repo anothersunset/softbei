@@ -1,8 +1,10 @@
 package com.zhiqian.ops.pipeline;
 
 import com.zhiqian.ops.agent.AgentStep;
+import com.zhiqian.ops.guard.ImpactEstimate;
 import com.zhiqian.ops.guard.InjectionResult;
 import com.zhiqian.ops.guard.RiskDecision;
+import com.zhiqian.ops.guard.SecurityScore;
 import com.zhiqian.ops.llm.PlanResult;
 import com.zhiqian.ops.retriever.Evidence;
 
@@ -24,6 +26,8 @@ public class ChatResponse {
     private String analysis;
     private List<Evidence> retrieval = new ArrayList<>();
     private List<AgentStep> steps = new ArrayList<>();
+    private SecurityScore securityScore;
+    private List<ImpactEstimate> counterfactual = new ArrayList<>();
 
     public String getTraceId() { return traceId; }
     public void setTraceId(String traceId) { this.traceId = traceId; }
@@ -45,4 +49,8 @@ public class ChatResponse {
     public void setRetrieval(List<Evidence> retrieval) { this.retrieval = retrieval; }
     public List<AgentStep> getSteps() { return steps; }
     public void setSteps(List<AgentStep> steps) { this.steps = steps; }
+    public SecurityScore getSecurityScore() { return securityScore; }
+    public void setSecurityScore(SecurityScore securityScore) { this.securityScore = securityScore; }
+    public List<ImpactEstimate> getCounterfactual() { return counterfactual; }
+    public void setCounterfactual(List<ImpactEstimate> counterfactual) { this.counterfactual = counterfactual; }
 }
