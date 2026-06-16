@@ -21,6 +21,20 @@ ops:
     working-dir: ${OPS_EXEC_WORKDIR:/tmp}
     # 演示模式：true 时不真正落盘执行高危变更，仅记录（默认安全）
     dry-run: ${OPS_EXEC_DRY_RUN:true}
+  # 主动巡检：只读体检阈值与定时开关（规则外置，便于按环境调整）
+  inspect:
+    scheduled-enabled: ${OPS_INSPECT_SCHEDULED:false}
+    interval-ms: ${OPS_INSPECT_INTERVAL_MS:300000}
+    disk-warn-percent: 80
+    disk-critical-percent: 90
+    mem-warn-percent: 85
+    mem-critical-percent: 95
+    load-warn-per-core: 1.0
+    load-critical-per-core: 2.0
+    zombie-warn: 1
+    zombie-critical: 5
+    log-error-warn: 20
+    log-error-critical: 100
   trace:
     file: ${OPS_TRACE_FILE:logs/ops-trace.jsonl}
 
