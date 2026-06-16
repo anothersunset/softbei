@@ -183,6 +183,43 @@
   .rep .rc code{font-family:ui-monospace,'SFMono-Regular',Consolas,monospace;font-size:12.5px;color:#cdd8ee;word-break:break-all}
   .rep .rc ul{margin:4px 0;padding-left:18px} .rep .rc li{margin:3px 0}
   .rep .rc .muted{color:var(--faint)}
+  /* security score + counterfactual */
+  .secsco{display:flex;gap:18px;align-items:center;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);margin-bottom:16px}
+  .secsco .radar{flex-shrink:0}
+  .secsco .si{flex:1;min-width:0}
+  .secsco .si .hd{display:flex;align-items:baseline;gap:6px}
+  .secsco .si .sc{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+  .secsco .si .gr{font-size:13px;font-weight:600;letter-spacing:.4px;margin-left:6px}
+  .secsco.a .sc,.secsco.a .gr{color:var(--safe)}
+  .secsco.b .sc,.secsco.b .gr{color:var(--accent)}
+  .secsco.c .sc,.secsco.c .gr{color:var(--review)}
+  .secsco.d .sc,.secsco.d .gr{color:var(--block)}
+  .secsco .dims{margin-top:12px;display:grid;gap:8px}
+  .secsco .dim{display:grid;grid-template-columns:78px 1fr 52px;align-items:center;gap:10px}
+  .secsco .dim .dn{font-size:11px;color:var(--dim)}
+  .secsco .dim .bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden}
+  .secsco .dim .bar>i{display:block;height:100%;border-radius:4px}
+  .secsco .dim .bar.s>i{background:var(--safe)}
+  .secsco .dim .bar.d>i{background:var(--accent)}
+  .secsco .dim .bar.e>i{background:var(--review)}
+  .secsco .dim .dv{font-size:11px;color:var(--faint);text-align:right;font-variant-numeric:tabular-nums}
+  .secnotes{margin:11px 0 0;padding:0;list-style:none}
+  .secnotes li{font-size:11.5px;color:var(--faint);padding:3px 0 3px 13px;position:relative;line-height:1.5}
+  .secnotes li::before{content:'';position:absolute;left:0;top:9px;width:4px;height:4px;border-radius:50%;background:var(--accent)}
+  .cf{border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:10px;background:var(--surface-2);border-left:2px solid var(--block)}
+  .cf.rev{border-left-color:var(--review)}
+  .cf .ct{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+  .cf .ct code{font-family:ui-monospace,'SFMono-Regular',Consolas,monospace;font-size:12.5px;color:#dfe3ea;word-break:break-all}
+  .cf .irr{font-size:9.5px;font-weight:700;letter-spacing:.6px;padding:3px 8px;border-radius:6px;text-transform:uppercase;white-space:nowrap;border:1px solid transparent}
+  .irr-CATASTROPHIC{color:#fff;background:var(--block)}
+  .irr-HIGH{color:var(--block);background:color-mix(in srgb,var(--block) 16%,transparent);border-color:color-mix(in srgb,var(--block) 36%,transparent)}
+  .irr-MEDIUM{color:var(--review);background:color-mix(in srgb,var(--review) 14%,transparent);border-color:color-mix(in srgb,var(--review) 34%,transparent)}
+  .irr-LOW{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 32%,transparent)}
+  .irr-NONE{color:var(--faint);background:color-mix(in srgb,var(--faint) 14%,transparent)}
+  .cf .imp{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
+  .cf .wc{font-size:12px;color:var(--block);margin-top:6px;line-height:1.6}
+  .cf.rev .wc{color:var(--review)}
+  .cf .rb{font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.6}
   ::-webkit-scrollbar{width:9px;height:9px}
   ::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
   ::-webkit-scrollbar-track{background:transparent}
@@ -298,7 +335,9 @@ const ICONS={
   GUARD:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M4 21v-6M4 11V3M12 21v-9M12 8V3M20 21v-4M20 13V3M1 15h6M9 8h6M17 17h6'/></svg>`,
   EXECUTE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M13 2 3 14h9l-1 8 10-12h-9z'/></svg>`,
   ANALYZE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>`,
-  DOT:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6'><circle cx='12' cy='12' r='3'/></svg>`
+  DOT:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6'><circle cx='12' cy='12' r='3'/></svg>`,
+  SCORE:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2 2 7l10 5 10-5-10-5z'/><path d='m2 17 10 5 10-5M2 12l10 5 10-5'/></svg>`,
+  REPLAY:`<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'/><path d='M3 3v5h5'/></svg>`
 };
 const STAGES=[
   {key:'RECEIVE',name:'接收'},{key:'INJECTION_GUARD',name:'抗注入'},{key:'SENSE',name:'感知'},
@@ -396,6 +435,8 @@ function render(d){
   const analysis=pick(d,['analysis']);
   const msg=pick(d,['message'])||'';
   lastTraceId=pick(d,['traceId'])||lastTraceId;
+  const secScore=pick(d,['securityScore']);
+  const counterfactual=pick(d,['counterfactual'])||[];
 
   let blockStage=null;
   if(status==='INJECTION_BLOCKED')blockStage='INJECTION_GUARD';
@@ -413,6 +454,23 @@ function render(d){
   let html='<div class="statbar '+sCls+'"><span class="sig"></span><span class="stt">'+esc(status||'-')+'</span><span class="msg">'+esc(msg)+'</span>'+(lastTraceId?'<span class="tid mono">'+esc(lastTraceId)+'</span>':'')+'</div>';
 
   $('confirmRow').style.display=(status==='REVIEW_PENDING')?'block':'none';
+
+  if(secScore&&pick(secScore,['score'])!=null){
+    var _sc=pick(secScore,['score']);var _grade=(pick(secScore,['grade'])||'').toString();
+    var _st=pick(secScore,['staticRisk'])||0,_dy=pick(secScore,['dynamicAudit'])||0,_ex=pick(secScore,['restrictedExec'])||0;
+    var _notes=pick(secScore,['notes'])||[];
+    var _gc=_sc>=90?'a':(_sc>=75?'b':(_sc>=60?'c':'d'));
+    html+='<div class="sec"><div class="lbl">'+ICONS.SCORE+'安全护栏综合评分 · 30 / 35 / 35</div>';
+    html+='<div class="secsco '+_gc+'">'+secRadar(_st,_dy,_ex)+'<div class="si">';
+    html+='<div class="hd"><span class="sc">'+esc(_sc)+'</span><span style="color:var(--faint);font-size:13px">/ 100</span><span class="gr">'+esc(_grade)+'</span></div>';
+    html+='<div class="dims">';
+    html+='<div class="dim"><span class="dn">静态风险评估</span><span class="bar s"><i style="width:'+Math.round(_st/30*100)+'%"></i></span><span class="dv">'+esc(_st)+' / 30</span></div>';
+    html+='<div class="dim"><span class="dn">动态意图审计</span><span class="bar d"><i style="width:'+Math.round(_dy/35*100)+'%"></i></span><span class="dv">'+esc(_dy)+' / 35</span></div>';
+    html+='<div class="dim"><span class="dn">受限执行</span><span class="bar e"><i style="width:'+Math.round(_ex/35*100)+'%"></i></span><span class="dv">'+esc(_ex)+' / 35</span></div>';
+    html+='</div>';
+    if(_notes.length)html+='<ul class="secnotes">'+_notes.map(function(n){return '<li>'+esc(asText(n))+'</li>'}).join('')+'</ul>';
+    html+='</div></div></div>';
+  }
 
   if(injection&&pick(injection,['blocked'])===true){
     const mp=pick(injection,['matchedPatterns'])||[];
@@ -455,6 +513,22 @@ function render(d){
     html+='</div>';
   }
 
+  if(counterfactual.length){
+    html+='<div class="sec"><div class="lbl">'+ICONS.REPLAY+'反事实回放 · 若放行会发生什么</div>';
+    counterfactual.forEach(function(cf){
+      var _cmd=pick(cf,['command'])||'';var _lvl=(pick(cf,['level'])||'').toString().toUpperCase();
+      var _irr=(pick(cf,['irreversibility'])||'').toString().toUpperCase();
+      var _imp=pick(cf,['impacts'])||[];var _wc=pick(cf,['worstCase'])||'';var _rbh=pick(cf,['rollbackHint'])||'';
+      var _rev=_lvl==='REVIEW'?' rev':'';
+      html+='<div class="cf'+_rev+'"><div class="ct"><code>'+esc(asText(_cmd))+'</code><span class="irr irr-'+esc(_irr)+'">'+esc(_irr||'-')+'</span></div>';
+      if(_imp.length)html+='<div class="imp">影响：'+esc(Array.isArray(_imp)?_imp.join('；'):asText(_imp))+'</div>';
+      if(_wc)html+='<div class="wc">最坏后果：'+esc(asText(_wc))+'</div>';
+      if(_rbh)html+='<div class="rb">回滚：'+esc(asText(_rbh))+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
   if(execResults.length){
     html+='<div class="sec"><div class="lbl">'+ICONS.EXECUTE+'最小权限执行</div>';
     execResults.forEach(function(ex){
@@ -480,6 +554,24 @@ function render(d){
   $('rawBox').textContent=JSON.stringify(d,null,2);
 }
 
+function secRadar(st,dy,ex){
+  var cx=60,cy=60,R=44;
+  var axes=[{v:st/30,a:-90},{v:dy/35,a:30},{v:ex/35,a:150}];
+  function pt(r,aDeg){var a=aDeg*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+  function clamp(v){return Math.max(0.05,Math.min(1,v||0));}
+  var grid='';
+  [0.25,0.5,0.75,1].forEach(function(g){
+    var pts=axes.map(function(x){var p=pt(R*g,x.a);return p[0].toFixed(1)+','+p[1].toFixed(1)}).join(' ');
+    grid+='<polygon points="'+pts+'" fill="none" stroke="var(--line)" stroke-width="1"/>';
+  });
+  var spokes='';
+  axes.forEach(function(x){var p=pt(R,x.a);spokes+='<line x1="'+cx+'" y1="'+cy+'" x2="'+p[0].toFixed(1)+'" y2="'+p[1].toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>';});
+  var dataPts=axes.map(function(x){var p=pt(R*clamp(x.v),x.a);return p[0].toFixed(1)+','+p[1].toFixed(1)}).join(' ');
+  var dots=axes.map(function(x){var p=pt(R*clamp(x.v),x.a);return '<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.5" fill="var(--accent)"/>'}).join('');
+  var lab=['静态','动态','受限'];
+  var labels=axes.map(function(x,i){var p=pt(R+13,x.a);return '<text x="'+p[0].toFixed(1)+'" y="'+(p[1]+3).toFixed(1)+'" fill="var(--faint)" font-size="9" text-anchor="middle">'+lab[i]+'</text>'}).join('');
+  return '<svg class="radar" width="120" height="120" viewBox="0 0 120 120">'+grid+spokes+'<polygon points="'+dataPts+'" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>'+dots+labels+'</svg>';
+}
 function renderTrace(steps){
   if(!steps||!steps.length){$('traceEmpty').style.display='block';$('traceBox').innerHTML='';return}
   $('traceEmpty').style.display='none';
@@ -523,6 +615,8 @@ function collectReport(d){
     decisions:pick(d,['decisions'])||[],
     execResults:pick(d,['execResults'])||[],
     analysis:pick(d,['analysis'])||'',
+    securityScore:pick(d,['securityScore']),
+    counterfactual:pick(d,['counterfactual'])||[],
     advice:adviceFor(status)
   };
 }
@@ -564,6 +658,12 @@ function renderReport(d){
   h+=sec('5','执行结果',eb);
   h+=sec('6','根因分析',r.analysis?esc(asText(r.analysis)).replace(/\n/g,'<br>'):'<span class="muted">无。</span>');
   h+=sec('7','处置建议',esc(r.advice));
+  var _ss=r.securityScore;
+  if(_ss&&pick(_ss,['score'])!=null){
+    var _rb='<div><b>'+esc(pick(_ss,['score']))+' / 100</b> · '+esc(pick(_ss,['grade'])||'')+'</div><ul><li>静态风险评估：'+esc(pick(_ss,['staticRisk']))+' / 30</li><li>动态意图审计：'+esc(pick(_ss,['dynamicAudit']))+' / 35</li><li>受限执行：'+esc(pick(_ss,['restrictedExec']))+' / 35</li></ul>';
+    if(r.counterfactual&&r.counterfactual.length){_rb+='<div style="margin-top:6px"><b>反事实回放：</b></div><ul>'+r.counterfactual.map(function(cf){return '<li><code>'+esc(asText(pick(cf,['command'])))+'</code> — <span class="badge '+lvlClass(pick(cf,['level']))+'">'+esc((pick(cf,['irreversibility'])||'').toString())+'</span> '+esc(asText(pick(cf,['worstCase'])||''))+'</li>';}).join('')+'</ul>';}
+    h+=sec('8','安全评分与反事实回放',_rb);
+  }
   $('reportBox').innerHTML=h;
 }
 function buildReportMarkdown(d){
@@ -598,6 +698,16 @@ function buildReportMarkdown(d){
   L.push('');
   L.push('## 6. 根因分析');L.push(r.analysis?asText(r.analysis):'（无）');L.push('');
   L.push('## 7. 处置建议');L.push(r.advice);L.push('');
+  var _ss=r.securityScore;
+  if(_ss&&pick(_ss,['score'])!=null){
+    L.push('## 8. 安全评分与反事实回放');
+    L.push('- 安全分：'+pick(_ss,['score'])+' / 100 ('+(pick(_ss,['grade'])||'')+')');
+    L.push('  - 静态风险评估：'+pick(_ss,['staticRisk'])+' / 30');
+    L.push('  - 动态意图审计：'+pick(_ss,['dynamicAudit'])+' / 35');
+    L.push('  - 受限执行：'+pick(_ss,['restrictedExec'])+' / 35');
+    if(r.counterfactual&&r.counterfactual.length){L.push('- 反事实回放：');r.counterfactual.forEach(function(cf){L.push('  - '+q+asText(pick(cf,['command']))+q+' — '+(pick(cf,['irreversibility'])||'')+'：'+asText(pick(cf,['worstCase'])||''));});}
+    L.push('');
+  }
   return L.join('\n');
 }
 function exportReportMd(){
