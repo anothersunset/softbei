@@ -6,6 +6,7 @@ import com.zhiqian.ops.agent.AgentNode;
 import com.zhiqian.ops.agent.AgentRunner;
 import com.zhiqian.ops.agent.AgentStep;
 import com.zhiqian.ops.agent.AgentTool;
+import com.zhiqian.ops.agent.ActiveTool;
 import com.zhiqian.ops.analyzer.RootCauseAnalyzer;
 import com.zhiqian.ops.exec.ExecResult;
 import com.zhiqian.ops.exec.LeastPrivilegeExecutor;
@@ -203,6 +204,8 @@ public class OpsPipeline {
         public Map<String, Object> run(AgentContext ctx) {
             Map<String, Object> sensed = new LinkedHashMap<>();
             for (AgentTool tool : senseTools) {
+                // 主动/动作类工具(如主动巡检)不在被动感知阶段自动执行，仅通过 MCP 或按需触发。
+                if (tool instanceof ActiveTool) continue;
                 try {
                     sensed.put(tool.name(), tool.run(ctx, Map.of()));
                 } catch (Exception e) {
@@ -211,7 +214,7 @@ public class OpsPipeline {
             }
             ctx.state().put("sensed", sensed);
             Map<String, Object> out = new LinkedHashMap<>();
-            out.put("toolsRun", senseTools.size());
+            out.put("toolsRun", sensed.size());
             out.put("sensed", sensed);
             return out;
         }
