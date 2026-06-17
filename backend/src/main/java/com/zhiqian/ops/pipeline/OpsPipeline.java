@@ -8,6 +8,7 @@ import com.zhiqian.ops.agent.AgentStep;
 import com.zhiqian.ops.agent.AgentTool;
 import com.zhiqian.ops.agent.ActiveTool;
 import com.zhiqian.ops.analyzer.RootCauseAnalyzer;
+import com.zhiqian.ops.exec.ExecProperties;
 import com.zhiqian.ops.exec.ExecResult;
 import com.zhiqian.ops.exec.LeastPrivilegeExecutor;
 import com.zhiqian.ops.guard.InjectionResult;
@@ -46,6 +47,7 @@ public class OpsPipeline {
     private final LeastPrivilegeExecutor executor;
     private final List<AgentTool> senseTools;
     private final ContextRetriever retriever;
+    private final ExecProperties execProps;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, CachedPlan> planCache = new ConcurrentHashMap<>();
 
@@ -57,7 +59,8 @@ public class OpsPipeline {
                        OpsAuditService audit,
                        LeastPrivilegeExecutor executor,
                        List<AgentTool> senseTools,
-                       ContextRetriever retriever) {
+                       ContextRetriever retriever,
+                       ExecProperties execProps) {
         this.runner = runner;
         this.injectionDetector = injectionDetector;
         this.guard = guard;
@@ -67,6 +70,7 @@ public class OpsPipeline {
         this.executor = executor;
         this.senseTools = senseTools;
         this.retriever = retriever;
+        this.execProps = execProps;
     }
 
     public ChatResponse chat(ChatRequest req) {
@@ -333,6 +337,9 @@ public class OpsPipeline {
         public Map<String, Object> run(AgentContext ctx) {
             boolean confirm = Boolean.TRUE.equals(ctx.state().get("confirm"));
             List<RiskDecision> decisions = (List<RiskDecision>) ctx.state().getOrDefault("decisions", new ArrayList<RiskDecision>());
+            int maxSteps = execProps.getMaxStepsPerRequest();
+            int executedCount = 0;
+            int cappedCount = 0;
             List<Map<String, Object>> execResults = new ArrayList<>();
             for (RiskDecision d : decisions) {
                 Map<String, Object> er = new LinkedHashMap<>();
@@ -345,11 +352,16 @@ public class OpsPipeline {
                 } else if (d.level() == RiskLevel.REVIEW && !confirm) {
                     er.put("executed", false);
                     er.put("output", "需人工二次确认后才会执行");
+                } else if (executedCount >= maxSteps) {
+                    cappedCount++;
+                    er.put("executed", false);
+                    er.put("output", "[circuit] 已达单次最大执行轮次上限(" + maxSteps + ")，为保证关键任务确定性、防止失控与死循环，剩余指令暂停执行，请分批处理或人工介入");
                 } else {
                     List<String> argv = tokenize(d.command());
                     ExecResult res = d.level() == RiskLevel.SAFE
                             ? executor.runReadOnly(argv)
                             : executor.run(argv);
+                    executedCount++;
                     er.put("executed", true);
                     er.put("exitCode", res.exitCode());
                     er.put("dryRun", res.dryRun());
@@ -364,6 +376,11 @@ public class OpsPipeline {
             ctx.state().put("execResults", execResults);
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("execResults", execResults);
+            out.put("executedCount", executedCount);
+            out.put("maxStepsPerRequest", maxSteps);
+            if (cappedCount > 0) {
+                out.put("cappedCount", cappedCount);
+            }
             return out;
         }
     }
