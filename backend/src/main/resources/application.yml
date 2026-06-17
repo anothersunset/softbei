@@ -21,6 +21,8 @@ ops:
     working-dir: ${OPS_EXEC_WORKDIR:/tmp}
     # 演示模式：true 时不真正落盘执行高危变更，仅记录（默认安全）
     dry-run: ${OPS_EXEC_DRY_RUN:true}
+    # 关键任务确定性：单次请求最大执行轮次上限（防幻觉计划批量下发/失控、防死循环）
+    max-steps-per-request: ${OPS_EXEC_MAX_STEPS:20}
   # 主动巡检：只读体检阈值与定时开关（规则外置，便于按环境调整）
   inspect:
     scheduled-enabled: ${OPS_INSPECT_SCHEDULED:false}

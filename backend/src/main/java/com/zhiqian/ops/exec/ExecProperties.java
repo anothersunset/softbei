@@ -19,6 +19,8 @@ public class ExecProperties {
     private String workingDir = "/tmp";
     /** 干跑模式：对变更类命令不真正执行，保障演示安全。 */
     private boolean dryRun = true;
+    /** 单次请求最大执行轮次（防幻觉计划批量下发/失控、防死循环，保障关键任务确定性）。 */
+    private int maxStepsPerRequest = 20;
 
     public String getRunAsUser() { return runAsUser; }
     public void setRunAsUser(String runAsUser) { this.runAsUser = runAsUser; }
@@ -30,4 +32,6 @@ public class ExecProperties {
     public void setWorkingDir(String workingDir) { this.workingDir = workingDir; }
     public boolean isDryRun() { return dryRun; }
     public void setDryRun(boolean dryRun) { this.dryRun = dryRun; }
+    public int getMaxStepsPerRequest() { return maxStepsPerRequest; }
+    public void setMaxStepsPerRequest(int maxStepsPerRequest) { this.maxStepsPerRequest = maxStepsPerRequest; }
 }
