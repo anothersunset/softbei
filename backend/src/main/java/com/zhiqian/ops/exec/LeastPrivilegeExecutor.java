@@ -17,22 +17,25 @@ import java.util.concurrent.TimeUnit;
  * 最小权限代理执行器。
  * 关键安全设计：始终以 argv 数组方式调用 ProcessBuilder，不经过 shell 解释，
  * 从根本上避免命令拼接/注入；可配置以受限账号（sudo -u）降权运行。
+ * 兜底机制：变更类真实执行接入熔断器，连续失败时短路高危执行，避免故障级联。
  */
 @Component
 public class LeastPrivilegeExecutor {
     private static final Logger log = LoggerFactory.getLogger(LeastPrivilegeExecutor.class);
     private final ExecProperties props;
+    private final CircuitBreaker breaker;
 
-    public LeastPrivilegeExecutor(ExecProperties props) {
+    public LeastPrivilegeExecutor(ExecProperties props, CircuitBreaker breaker) {
         this.props = props;
+        this.breaker = breaker;
     }
 
-    /** 执行只读/感知类命令（不受 dry-run 影响）。 */
+    /** 执行只读/感知类命令（不受 dry-run 与熔断影响）。 */
     public ExecResult runReadOnly(List<String> argv) {
         return exec(argv, true);
     }
 
-    /** 执行变更类命令（dry-run 打开时不真正执行）。 */
+    /** 执行变更类命令（dry-run 打开时不真正执行；接入熔断兜底）。 */
     public ExecResult run(List<String> argv) {
         return exec(argv, false);
     }
@@ -46,6 +49,13 @@ public class LeastPrivilegeExecutor {
             log.info("[dry-run] skip mutating command: {}", String.join(" ", argv));
             return new ExecResult(0, "[dry-run] 已跳过实际执行：" + String.join(" ", argv), "", true, System.currentTimeMillis() - start);
         }
+        // 兜底熔断：仅对变更类真实执行生效；dry-run 已在上方提前返回，只读命令亦不参与，保证评测可复现。
+        if (!readOnly && !breaker.allowExecution()) {
+            long leftSec = breaker.remainingCooldownMillis() / 1000;
+            log.warn("[circuit-open] 熔断中，拒绝变更类执行：{}", String.join(" ", argv));
+            return new ExecResult(-1, "", "[circuit-open] 连续失败已触发熔断，暂停高危执行约 " + leftSec + "s，请人工介入排查后再试", false, System.currentTimeMillis() - start);
+        }
+        ExecResult result;
         List<String> cmd = new ArrayList<>();
         if (props.isUseSudo()) {
             cmd.add("sudo");
@@ -62,14 +72,24 @@ public class LeastPrivilegeExecutor {
             boolean finished = p.waitFor(props.getTimeoutSeconds(), TimeUnit.SECONDS);
             if (!finished) {
                 p.destroyForcibly();
-                return new ExecResult(-1, "", "执行超时（>" + props.getTimeoutSeconds() + "s）", false, System.currentTimeMillis() - start);
+                result = new ExecResult(-1, "", "执行超时（>" + props.getTimeoutSeconds() + "s）", false, System.currentTimeMillis() - start);
+            } else {
+                String out = readStream(p.getInputStream());
+                String err = readStream(p.getErrorStream());
+                result = new ExecResult(p.exitValue(), out, err, false, System.currentTimeMillis() - start);
             }
-            String out = readStream(p.getInputStream());
-            String err = readStream(p.getErrorStream());
-            return new ExecResult(p.exitValue(), out, err, false, System.currentTimeMillis() - start);
         } catch (Exception e) {
-            return new ExecResult(-1, "", "执行异常：" + e.getMessage(), false, System.currentTimeMillis() - start);
+            result = new ExecResult(-1, "", "执行异常：" + e.getMessage(), false, System.currentTimeMillis() - start);
         }
+        // 记录变更类真实执行的成败，驱动熔断器状态机
+        if (!readOnly) {
+            if (result.success()) {
+                breaker.recordSuccess();
+            } else {
+                breaker.recordFailure();
+            }
+        }
+        return result;
     }
 
     private String readStream(InputStream in) {
