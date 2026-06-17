@@ -28,6 +28,7 @@ public class ChatResponse {
     private List<AgentStep> steps = new ArrayList<>();
     private SecurityScore securityScore;
     private List<ImpactEstimate> counterfactual = new ArrayList<>();
+    private List<Map<String, Object>> rollbackPlan = new ArrayList<>();
 
     public String getTraceId() { return traceId; }
     public void setTraceId(String traceId) { this.traceId = traceId; }
@@ -53,4 +54,6 @@ public class ChatResponse {
     public void setSecurityScore(SecurityScore securityScore) { this.securityScore = securityScore; }
     public List<ImpactEstimate> getCounterfactual() { return counterfactual; }
     public void setCounterfactual(List<ImpactEstimate> counterfactual) { this.counterfactual = counterfactual; }
+    public List<Map<String, Object>> getRollbackPlan() { return rollbackPlan; }
+    public void setRollbackPlan(List<Map<String, Object>> rollbackPlan) { this.rollbackPlan = rollbackPlan; }
 }
