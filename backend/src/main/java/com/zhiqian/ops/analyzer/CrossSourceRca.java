@@ -1,19 +1,33 @@
 package com.zhiqian.ops.analyzer;
 
 import com.zhiqian.ops.inspect.InspectionFinding;
+import com.zhiqian.ops.inspect.InspectionProperties;
 import com.zhiqian.ops.inspect.InspectionReport;
+import com.zhiqian.ops.inspect.LogEvent;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 跨源根因分析器：以一次只读巡检报告为输入，将「指标域」(磁盘/内存/负载/进程)信号
  * 与「日志域」(系统错误日志)信号做跨源关联，输出根因假设与 L1-L3 分级处置建议。
+ *
+ * 相较于纯阈值规则，本分析器在「同一巡检窗口同时升高」之上，进一步引入
+ * 「时间窗口 + 错误类型」的精细关联：在最近 N 分钟(ops.inspect.log-window-minutes)内，
+ * 若 journal 出现与指标异常同源的错误类型(内存↔OOM、磁盘↔DISK_FULL/IO)，
+ * 则判定为同一根因并提升处置等级与置信度(例如「高内存 + 5 分钟内 OOM」→ L3)。
  * 纯计算、只读，不触发任何变更；真正处置仍需走主链路护栏与人工确认。
  */
 @Component
 public class CrossSourceRca {
+
+    private final InspectionProperties props;
+
+    public CrossSourceRca(InspectionProperties props) {
+        this.props = props;
+    }
 
     public RcaResult analyze(InspectionReport report) {
         List<RcaInsight> insights = new ArrayList<>();
@@ -24,6 +38,10 @@ public class CrossSourceRca {
         InspectionFinding log = find(report, "log-errors");
         String logSev = log != null ? log.severity() : "UNKNOWN";
         boolean logElevated = "WARN".equals(logSev) || "CRITICAL".equals(logSev);
+
+        long now = System.currentTimeMillis();
+        long windowMs = props.getLogWindowMinutes() * 60_000L;
+        int windowMin = props.getLogWindowMinutes();
 
         int criticalCount = 0;
         boolean anyMetricAnomaly = false;
@@ -37,16 +55,40 @@ public class CrossSourceRca {
             boolean metricCritical = "CRITICAL".equals(sev);
             if (metricCritical) criticalCount++;
 
-            String level = grade(metricCritical, logElevated);
-            String correlation = logElevated
-                    ? "指标异常(" + f.title() + "=" + f.observed() + ") 与 系统错误日志(" + log.observed()
-                        + " 条 err 级，" + logSev + ") 在同一巡检窗口内同时升高，跨源相互印证，判定为关联事件"
-                    : "仅指标侧异常(" + f.title() + "=" + f.observed() + ")，日志侧未见明显错误升高，暂判为单源信号，建议二次观察确认";
+            Set<String> kinds = expectedKinds(f.id());
+            List<LogEvent> matched = kinds.isEmpty()
+                    ? List.of() : matchEvents(report, kinds, windowMs, now);
+            boolean kindMatch = !matched.isEmpty();
+
+            String level = grade(metricCritical, logElevated, kindMatch);
+
+            String correlation;
+            if (kindMatch) {
+                LogEvent latest = matched.get(matched.size() - 1);
+                correlation = "在 " + windowMin + " 分钟时间窗口内，指标异常(" + f.title() + "=" + f.observed()
+                        + ") 与 journal 中 " + matched.size() + " 条 " + kindLabel(matched)
+                        + " 错误(最近一条 @" + safeTime(latest) + ")同时出现，时间窗口跨源关联，高置信判定为同一根因";
+            } else if (logElevated) {
+                correlation = "指标异常(" + f.title() + "=" + f.observed() + ") 与 系统错误日志(" + log.observed()
+                        + " 条 err 级，" + logSev + ") 在同一巡检窗口内同时升高，跨源相互印证，判定为关联事件";
+            } else {
+                correlation = "仅指标侧异常(" + f.title() + "=" + f.observed() + ")，日志侧未见明显错误升高，暂判为单源信号，建议二次观察确认";
+            }
 
             List<String> chain = new ArrayList<>();
             chain.add("[指标] " + f.title() + ": " + f.observed() + " (阈值 " + f.threshold() + "，" + sev + ")");
             chain.add("[指标证据] " + f.evidence());
-            if (logElevated) {
+            if (kindMatch) {
+                chain.add("[时间窗口] 窗口=" + windowMin + "min，命中同源错误日志 " + matched.size() + " 条：");
+                int shown = 0;
+                for (LogEvent e : matched) {
+                    if (shown++ >= 3) {
+                        chain.add("  …其余 " + (matched.size() - 3) + " 条略");
+                        break;
+                    }
+                    chain.add("  @" + safeTime(e) + " [" + e.kind() + "] " + e.message());
+                }
+            } else if (logElevated) {
                 chain.add("[日志] 系统错误日志: " + log.observed() + " 条 (" + logSev + ")");
                 chain.add("[日志证据] " + log.evidence());
             } else {
@@ -56,9 +98,9 @@ public class CrossSourceRca {
             insights.add(new RcaInsight(
                     level, f.category(),
                     f.title() + " 根因研判",
-                    correlation, rootCause(f.id(), metricCritical),
+                    correlation, rootCause(f.id(), metricCritical, kindMatch, matched),
                     f.suggestion() + "（处置须走主链路：高危指令经 REVIEW + 人工确认后执行，并保留一键回滚账本）",
-                    disposition(level), confidence(metricCritical, logElevated), chain));
+                    disposition(level), confidence(metricCritical, logElevated, kindMatch), chain));
         }
 
         if (logElevated && !anyMetricAnomaly) {
@@ -82,6 +124,49 @@ public class CrossSourceRca {
                 buildSummary(insights, criticalCount, logElevated, overall), insights);
     }
 
+    /** 指标 id -> 与之同源的日志错误类型(用于时间窗口关联)。 */
+    private Set<String> expectedKinds(String id) {
+        return switch (id) {
+            case "mem-usage" -> Set.of("OOM");
+            case "disk-usage" -> Set.of("DISK_FULL", "IO");
+            default -> Set.of();
+        };
+    }
+
+    private List<LogEvent> matchEvents(InspectionReport report, Set<String> kinds, long windowMs, long now) {
+        List<LogEvent> out = new ArrayList<>();
+        if (report.recentLogEvents() == null) return out;
+        for (LogEvent e : report.recentLogEvents()) {
+            if (e == null) continue;
+            boolean inWindow = e.epochMillis() < 0 || (now - e.epochMillis() <= windowMs);
+            if (inWindow && kinds.contains(e.kind())) {
+                out.add(e);
+            }
+        }
+        return out;
+    }
+
+    private String kindLabel(List<LogEvent> matched) {
+        boolean oom = false, io = false, df = false;
+        for (LogEvent e : matched) {
+            switch (e.kind()) {
+                case "OOM" -> oom = true;
+                case "IO" -> io = true;
+                case "DISK_FULL" -> df = true;
+                default -> { }
+            }
+        }
+        List<String> labels = new ArrayList<>();
+        if (oom) labels.add("OOM/内存耗尽");
+        if (df) labels.add("磁盘写满");
+        if (io) labels.add("磁盘 I/O");
+        return labels.isEmpty() ? "同源" : String.join("、", labels);
+    }
+
+    private String safeTime(LogEvent e) {
+        return e.time() == null || e.time().isEmpty() ? "时间未知" : e.time();
+    }
+
     private InspectionFinding find(InspectionReport report, String id) {
         for (InspectionFinding f : report.findings()) {
             if (f != null && id.equals(f.id())) return f;
@@ -89,8 +174,9 @@ public class CrossSourceRca {
         return null;
     }
 
-    private String grade(boolean metricCritical, boolean logElevated) {
-        if (metricCritical && logElevated) return "L3";
+    private String grade(boolean metricCritical, boolean logElevated, boolean kindMatch) {
+        if (metricCritical && (logElevated || kindMatch)) return "L3";
+        if (kindMatch) return "L2";
         if (metricCritical) return "L2";
         if (logElevated) return "L2";
         return "L1";
@@ -104,8 +190,8 @@ public class CrossSourceRca {
         };
     }
 
-    private String rootCause(String id, boolean critical) {
-        return switch (id) {
+    private String rootCause(String id, boolean critical, boolean kindMatch, List<LogEvent> matched) {
+        String base = switch (id) {
             case "disk-usage" -> critical
                     ? "磁盘空间接近写满，极可能导致服务写入失败、日志中断或数据库异常"
                     : "磁盘使用率偏高，存在写满风险，多由大文件/旧日志堆积引起";
@@ -118,12 +204,22 @@ public class CrossSourceRca {
             case "zombie" -> "存在僵尸进程未被回收，父进程回收逻辑异常或已挂起";
             default -> "资源指标异常，需结合上下文进一步定位";
         };
+        if (kindMatch) {
+            if ("mem-usage".equals(id)) {
+                return base + "；journal 已捕获 OOM/内核终止进程事件，证实内存压力已实际触发进程被杀，二者为同一根因";
+            }
+            if ("disk-usage".equals(id)) {
+                return base + "；journal 已出现空间写满/磁盘 I/O 错误事件，证实磁盘问题已影响实际读写，二者为同一根因";
+            }
+        }
+        return base;
     }
 
-    private int confidence(boolean metricCritical, boolean logElevated) {
+    private int confidence(boolean metricCritical, boolean logElevated, boolean kindMatch) {
         int base = metricCritical ? 75 : 60;
-        if (logElevated) base += 15;
-        return Math.min(95, base);
+        if (logElevated) base += 10;
+        if (kindMatch) base += 15;
+        return Math.min(97, base);
     }
 
     private String overallLevel(List<RcaInsight> insights) {

@@ -34,6 +34,8 @@ public class InspectionProperties {
     private int logErrorWarn = 20;
     /** 系统错误日志条数严重阈值。 */
     private int logErrorCritical = 100;
+    /** 跨源关联的时间窗口(分钟)：仅将该窗口内的错误日志与指标异常关联为同一根因。 */
+    private int logWindowMinutes = 5;
 
     public boolean isScheduledEnabled() { return scheduledEnabled; }
     public void setScheduledEnabled(boolean v) { this.scheduledEnabled = v; }
@@ -59,4 +61,6 @@ public class InspectionProperties {
     public void setLogErrorWarn(int v) { this.logErrorWarn = v; }
     public int getLogErrorCritical() { return logErrorCritical; }
     public void setLogErrorCritical(int v) { this.logErrorCritical = v; }
+    public int getLogWindowMinutes() { return logWindowMinutes; }
+    public void setLogWindowMinutes(int v) { this.logWindowMinutes = v; }
 }

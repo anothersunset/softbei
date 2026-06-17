@@ -4,6 +4,7 @@ import java.util.List;
 
 /**
  * 一次主动巡检的健康报告（只读，不触发任何变更操作）。
+ * recentLogEvents：本轮采集到的带时间戳/分类的错误日志事件，供跨源时间窗口关联使用。
  */
 public record InspectionReport(
         String inspectId,
@@ -14,5 +15,6 @@ public record InspectionReport(
         String summary,
         List<InspectionFinding> findings,
         List<String> sources,
+        List<LogEvent> recentLogEvents,
         long elapsedMs
 ) {}

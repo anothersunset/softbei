@@ -8,6 +8,9 @@ import com.zhiqian.ops.trace.OpsTrace;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,6 +21,7 @@ import java.util.UUID;
  * 主动巡检服务：周期性/按需对系统做只读体检，按阈值规则生成风险预警与健康评分。
  * 关键安全约束：全程仅调用只读命令(runReadOnly)，绝不触发任何变更；
  * 不绕过安全护栏——仅提供「主动发现 + 处置建议」，真正的处置仍需走主链路的护栏与人工确认。
+ * 错误日志采集带时间戳与类型分类(OOM/IO/DISK_FULL)，供跨源根因分析做时间窗口关联。
  */
 @Service
 public class InspectionService {
@@ -44,7 +48,9 @@ public class InspectionService {
         findings.add(checkLoad(sources));
         findings.add(checkZombie(sources));
         findings.add(checkPorts(sources));
-        findings.add(checkLogErrors(sources));
+
+        List<LogEvent> logEvents = collectLogEvents(sources);
+        findings.add(checkLogErrors(logEvents));
 
         int score = computeScore(findings);
         String overall = overall(findings);
@@ -64,6 +70,7 @@ public class InspectionService {
         return new InspectionReport(
                 UUID.randomUUID().toString(), traceId, Instant.now().toString(),
                 score, overall, summary, findings, sources,
+                logEvents == null ? List.of() : logEvents,
                 System.currentTimeMillis() - start);
     }
 
@@ -206,26 +213,63 @@ public class InspectionService {
                 "如需排查端口占用，可走主链路指令 ss -tlnp / lsof -i");
     }
 
-    private InspectionFinding checkLogErrors(List<String> sources) {
-        sources.add("journalctl -p 3 -n 200");
-        ExecResult r = run(List.of("journalctl", "-p", "3", "-n", "200", "--no-pager"));
-        if (!ok(r)) {
-            return unknown("log-errors", "log", "系统错误日志", "journalctl 不可用");
+    /**
+     * 采集近 200 条 err 级 journal 日志，逐条解析时间戳并按关键字分类(OOM/IO/DISK_FULL)。
+     * @return 事件列表；当 journalctl 不可用时返回 null。
+     */
+    private List<LogEvent> collectLogEvents(List<String> sources) {
+        sources.add("journalctl -p 3 -n 200 -o short-iso");
+        ExecResult r = run(List.of("journalctl", "-p", "3", "-n", "200", "-o", "short-iso", "--no-pager"));
+        if (r == null || r.exitCode() != 0) {
+            return null;
         }
-        int count = 0;
+        List<LogEvent> events = new ArrayList<>();
+        if (r.stdout() == null) return events;
         for (String line : r.stdout().lines().toList()) {
             String s = line.trim();
             if (s.isEmpty() || s.startsWith("--")) continue;
-            count++;
+            long epoch = parseIsoEpoch(s);
+            String iso = epoch >= 0 ? s.substring(0, Math.min(s.indexOf(' ') < 0 ? s.length() : s.indexOf(' '), s.length())) : "";
+            String kind = classifyLog(s);
+            String msg = s.length() > 300 ? s.substring(0, 300) : s;
+            events.add(new LogEvent(iso, epoch, kind, msg));
+        }
+        return events;
+    }
+
+    private InspectionFinding checkLogErrors(List<LogEvent> events) {
+        if (events == null) {
+            return unknown("log-errors", "log", "系统错误日志", "journalctl 不可用");
+        }
+        int count = events.size();
+        long now = System.currentTimeMillis();
+        long windowMs = props.getLogWindowMinutes() * 60_000L;
+        int recent = 0;
+        int oom = 0, io = 0, diskFull = 0;
+        for (LogEvent e : events) {
+            if (e.epochMillis() >= 0 && now - e.epochMillis() <= windowMs) recent++;
+            switch (e.kind()) {
+                case "OOM" -> oom++;
+                case "IO" -> io++;
+                case "DISK_FULL" -> diskFull++;
+                default -> { }
+            }
         }
         String sev = count >= props.getLogErrorCritical() ? "CRITICAL"
                 : count >= props.getLogErrorWarn() ? "WARN" : "OK";
         String sug = "OK".equals(sev) ? "近期无明显错误日志"
                 : "查看最近错误(journalctl -p 3 -xb)，结合知识库 runbook 定位故障源";
+        StringBuilder kinds = new StringBuilder();
+        if (oom > 0) kinds.append("OOM×").append(oom).append(' ');
+        if (io > 0) kinds.append("IO×").append(io).append(' ');
+        if (diskFull > 0) kinds.append("DISK_FULL×").append(diskFull).append(' ');
+        String evidence = "匹配到 " + count + " 条错误级日志"
+                + "（近 " + props.getLogWindowMinutes() + " 分钟内 " + recent + " 条）"
+                + (kinds.length() > 0 ? "；关键类型：" + kinds.toString().trim() : "");
         return new InspectionFinding("log-errors", "log", sev,
                 "系统错误日志(近200条优先级<=err)", "条数", String.valueOf(count),
                 ">=" + props.getLogErrorWarn() + " 告警 / >=" + props.getLogErrorCritical() + " 严重",
-                "匹配到 " + count + " 条错误级日志", sug);
+                evidence, sug);
     }
 
     // ---------- 评分与汇总 ----------
@@ -331,5 +375,47 @@ public class InspectionService {
         } catch (Exception e) {
             return -1;
         }
+    }
+
+    /** 解析 journalctl short-iso 行首时间戳为毫秒；失败返回 -1。 */
+    private long parseIsoEpoch(String line) {
+        int sp = line.indexOf(' ');
+        if (sp <= 0) return -1;
+        String ts = line.substring(0, sp);
+        String norm = ts;
+        int len = ts.length();
+        if (len >= 5) {
+            char sign = ts.charAt(len - 5);
+            String tail = ts.substring(len - 4);
+            boolean digits = tail.chars().allMatch(Character::isDigit);
+            if ((sign == '+' || sign == '-') && digits) {
+                norm = ts.substring(0, len - 5) + sign + tail.substring(0, 2) + ":" + tail.substring(2);
+            }
+        }
+        try {
+            return OffsetDateTime.parse(norm).toInstant().toEpochMilli();
+        } catch (Exception e) {
+            try {
+                return LocalDateTime.parse(norm).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            } catch (Exception e2) {
+                return -1;
+            }
+        }
+    }
+
+    private String classifyLog(String line) {
+        String lc = line.toLowerCase();
+        if (lc.contains("out of memory") || lc.contains("oom-kill") || lc.contains("oom_kill")
+                || lc.contains("oom_reaper") || lc.contains("killed process")) {
+            return "OOM";
+        }
+        if (lc.contains("no space left") || lc.contains("disk full") || lc.contains("quota exceeded")) {
+            return "DISK_FULL";
+        }
+        if (lc.contains("i/o error") || lc.contains("ext4-fs error") || lc.contains("blk_update_request")
+                || lc.contains("buffer i/o") || (lc.contains("xfs") && lc.contains("error"))) {
+            return "IO";
+        }
+        return "OTHER";
     }
 }
