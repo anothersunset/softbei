@@ -31,10 +31,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * 安全护栏编排管线：接收指令 -> 抗注入 -> 感知环境 -> 知识检索 -> 推理决策 -> 安全校验 -> 执行 -> 根因分析。
- * 复用原项目 AgentRunner 「逐节点迭代 + onStep 回调」模式，每步均落盘溯源。
+ * 复用原项目 AgentRunner 「逐节点迭代 + onStep 回调」模式，每步均落盘滯源。
+ * 另提供带 stepListener 的 chat 重载，供 SSE 实时逐步推送思维链（不改变裁决与状态机）。
  */
 @Service
 public class OpsPipeline {
@@ -74,13 +76,21 @@ public class OpsPipeline {
     }
 
     public ChatResponse chat(ChatRequest req) {
+        return chat(req, null);
+    }
+
+    /**
+     * 与 {@link #chat(ChatRequest)} 逻辑完全一致，仅额外在每个节点完成时通过 stepListener 实时回调。
+     * stepListener 为 null 时与原方法等价，保证同步 REST 路径与评测行为不变。
+     */
+    public ChatResponse chat(ChatRequest req, Consumer<AgentStep> stepListener) {
         String instruction = req.getInstruction() == null ? "" : req.getInstruction().trim();
         boolean confirm = req.isConfirm();
         ChatResponse resp = new ChatResponse();
 
         // 人工确认执行路径：复用缓存的计划，仅重跑感知+检索+校验+执行+分析
         if (confirm && req.getTraceId() != null && planCache.containsKey(req.getTraceId())) {
-            return runConfirmed(req.getTraceId(), resp);
+            return runConfirmed(req.getTraceId(), resp, stepListener);
         }
 
         // 安全修复(P0)：confirm 仅在命中「已缓存的待确认计划」时才生效。
@@ -98,7 +108,10 @@ public class OpsPipeline {
         List<AgentNode> nodes = List.of(
                 new ReceiveNode(), new InjectionNode(), new SenseNode(), new RetrieveNode(),
                 new ReasonNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
-        List<AgentStep> steps = runner.run(nodes, ctx, s -> audit.appendStep(trace.getTraceId(), s));
+        List<AgentStep> steps = runner.run(nodes, ctx, s -> {
+            audit.appendStep(trace.getTraceId(), s);
+            if (stepListener != null) stepListener.accept(s);
+        });
         resp.setSteps(steps);
 
         finalize(ctx, resp, instruction, confirm);
@@ -106,7 +119,7 @@ public class OpsPipeline {
         return resp;
     }
 
-    private ChatResponse runConfirmed(String traceId, ChatResponse resp) {
+    private ChatResponse runConfirmed(String traceId, ChatResponse resp, Consumer<AgentStep> stepListener) {
         CachedPlan cached = planCache.get(traceId);
         resp.setTraceId(traceId);
         AgentContext ctx = new AgentContext(System.currentTimeMillis(), 0L);
@@ -120,7 +133,10 @@ public class OpsPipeline {
         // 避免确认链路只剩 校验/执行/分析 三步、retrieval=0 的断层问题。
         List<AgentNode> nodes = List.of(
                 new SenseNode(), new RetrieveNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
-        List<AgentStep> steps = runner.run(nodes, ctx, s -> audit.appendStep(traceId, s));
+        List<AgentStep> steps = runner.run(nodes, ctx, s -> {
+            audit.appendStep(traceId, s);
+            if (stepListener != null) stepListener.accept(s);
+        });
         resp.setSteps(steps);
         finalize(ctx, resp, cached.instruction, true);
         planCache.remove(traceId);
