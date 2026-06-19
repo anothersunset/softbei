@@ -14,32 +14,71 @@
 
 ## 2. 安全护栏架构（核心）
 
+后端为**八阶段**编排管线，全程 TraceID 落盘可追溯：
+
 ```
 自然语言指令
    │
    ▼
-[① 抗注入检测 PromptInjectionDetector]  ── 命中 → 拒绝
+[① 抗注入检测 PromptInjectionDetector]   ── 命中 → INJECTION_BLOCKED
    │
    ▼
-[② OS 环境深度感知 SenseTools(MCP)]     ── 只读采集进程/磁盘/网络/日志上下文
+[② OS 环境深度感知 SenseTools(MCP)]      ── 只读采集进程/磁盘/网络/日志(带时间戳事件)
    │
    ▼
-[③ 大模型推理 LlmClient]                ── 产出处置方案 + 候选指令(JSON)
+[③ 知识/规则检索 ContextRetriever]       ── 为放行决策挂依据(证据)，降低纯 LLM 依赖
    │
    ▼
-[④ 意图风险校验 IntentRiskGuard]        ── 对每条原始指令做"二次过滤"：SAFE / REVIEW / BLOCK
-   │                                       命中红线 → BLOCK；高危 → 需人工确认
-   ▼
-[⑤ 最小权限执行 LeastPrivilegeExecutor] ── 受限账户 + 命令白名单 + 禁用 shell 元字符 + 超时
+[④ 大模型推理 LlmClient]                 ── 产出处置方案 + 候选指令(JSON)
    │
    ▼
-[⑥ 根因分析 RootCauseAnalyzer]
+[⑤ 意图风险校验 IntentRiskGuard]         ── 逐条二次过滤：SAFE / REVIEW / BLOCK；高危需人工确认
    │
    ▼
-[全程：推理链路溯源 OpsAuditService]     ── RECEIVE→SENSE→REASON→GUARD→EXECUTE→ANALYZE 闭环 JSONL
+[⑥ 最小权限执行 LeastPrivilegeExecutor]  ── 受限账户 + 白名单 + 禁用 shell 元字符 + 超时
+   │                                        + 熔断器 + 执行轮次上限 + 动作账本/一键回滚
+   ▼
+[⑦ 跨源根因分析 CrossSourceRca]          ── 指标↔日志时间窗口关联 + L1–L3 分级处置
+   │
+   ▼
+[全程：链路溯源 OpsAuditService] ── RECEIVE→INJECTION_GUARD→SENSE→RETRIEVE→REASON→GUARD→EXECUTE→ANALYZE 闭环 JSONL
 ```
 
-## 3. 技术栈
+## 3. ✨ 新增亮点能力（差异化）
+
+> 在初赛五大支柱之上，围绕官方评分维度新增的差异化能力，默认 **只读 / dry-run**，不破坏评测确定性。
+
+### 🛡️ 安全：可量化 + 可解释
+- **安全护栏综合评分 SecurityScore**：按「静态风险 30% / 动态意图审计 35% / 受限执行 35%」三维折算为 0–100 安全分，控制台三维雷达可视化，并写入处置报告。
+- **反事实回放 Counterfactual Replay**：对被 BLOCK / REVIEW 的命令预估「若放行会发生什么」（受影响文件、不可逆性评级），把抽象护栏变成看得见的拦截价值。
+- **红蓝对抗注入看板**：内置红队语料（角色扮演 / 忽略安全策略 / NOPASSWD / 反弹 shell / base64 绕过…），一键真实过护栏，实时统计拦截率 / 误杀率。
+
+### 🔍 根因分析：从「并列罗列」到「跨源关联」
+- **跨源 RCA（指标 ↔ 日志）**：巡检采集带时间戳与分类（OOM / DISK_FULL / IO）的结构化日志事件，在 N 分钟时间窗口内做「指标异常 ↔ 日志事件」同根因关联，输出 L1–L3 分级处置与证据链。
+- **LLM 根因总结（可选）**：真实模型下生成自然语言根因叙述；mock 路径规则回退，保证评测可复现。
+- **主动巡检 health_inspect**：只读体检 + 健康评分 + 风险预警（HEALTHY / WARNING / DEGRADED / CRITICAL），从被动响应走向主动预测。
+
+### ⚙️ 执行确定性：兜底 + 可恢复
+- **动作账本 + 一键回滚**：每个变更自动生成补偿（逆操作）脚本与 append-only 审计账本，回滚默认 dry-run。
+- **执行轮次熔断**：单次请求最大执行轮次上限（默认 20，`OPS_EXEC_MAX_STEPS` 可配），防幻觉批量下发；变更类真实执行接入熔断器，连续失败短路高危执行。
+
+### 🔌 协议与体验
+- **MCP 双传输通道**：HTTP 与 stdio 复用同一 `McpDispatcher` 路由；stdio 以换行分隔 JSON-RPC，体现「MCP 运维插件化」。
+- **MCP 协议合规**：严格对齐 JSON-RPC 2.0 + MCP 规范（协议协商 / 通知 / ping / isError / annotations），MCP-01~08 用例 15/15 全 PASS。
+- **SSE 实时思维链**：`/api/ops/chat/stream` 逐阶段推送（类 ChatGPT tool_call），前端「实时思维链」面板逐节点展示并附安全评分 / 回滚建议。
+- **可观测性**：接入 `micrometer-registry-prometheus`，打通 `/actuator/prometheus` 指标端点。
+
+### ✅ 验收证据
+
+| 项目 | 结果 |
+|---|---|
+| 安全护栏单元测试（确定性回放） | **33/33 PASS** |
+| 云服务器部署验收（腾讯云 Ubuntu，含真实 LLM provider=xiaomi） | **19/19 PASS** |
+| MCP 协议合规验证（MCP-01~08） | **15/15 PASS** |
+
+> 仅列已归档报告对应的真实结果，不虚标。
+
+## 4. 技术栈
 
 | 层 | 选型 | 说明 |
 |---|---|---|
@@ -50,7 +89,7 @@
 | 前端 | 原生 HTML + JS（零构建） | 架构无关，LoongArch 直接可跑 |
 | 部署 | Docker（loong64） + 麒麟 V11 | `deploy/Dockerfile.loong64` |
 
-## 4. 目录结构
+## 5. 目录结构
 
 ```
 softbei/
@@ -60,23 +99,23 @@ softbei/
 │       ├── java/com/zhiqian/ops/
 │       │   ├── agent/       # Agent 核心 + MCP 感知工具插件
 │       │   ├── llm/         # 大模型客户端（DeepSeek / Mock）
-│       │   ├── guard/       # 安全护栏：意图风险校验 + 抗注入
-│       │   ├── exec/        # 最小权限执行器
+│       │   ├── guard/       # 安全护栏：意图风险校验 + 抗注入 + 安全评分
+│       │   ├── exec/        # 最小权限执行器 + 熔断 + 动作账本/回滚
 │       │   ├── trace/       # 推理链路溯源审计
-│       │   ├── analyzer/    # 根因分析
-│       │   ├── mcp/         # MCP JSON-RPC 端点
-│       │   ├── pipeline/    # 编排管线
-│       │   └── web/         # REST 控制器
+│       │   ├── analyzer/    # 跨源根因分析 + 主动巡检
+│       │   ├── mcp/         # MCP JSON-RPC 端点（HTTP / stdio 双通道）
+│       │   ├── pipeline/    # 八阶段编排管线
+│       │   └── web/         # REST 控制器 + SSE 实时思维链
 │       └── resources/
 │           ├── application.yml
 │           ├── risk-rules.yaml     # 安全规则库（可热配置）
 │           └── static/index.html   # B/S 控制台
 ├── deploy/                  # LoongArch + 麒麟 V11 部署
-├── docs/                    # 9 份初赛提交文档
+├── docs/                    # 初赛提交文档 + 增强阶段设计/验收报告
 └── README.md
 ```
 
-## 5. 快速开始
+## 6. 快速开始
 
 ```bash
 cd backend
@@ -94,7 +133,7 @@ mvn spring-boot:run
 
 详见 `docs/06-软件安装包及部署文档.md`。
 
-## 6. 提交物清单（初赛）
+## 7. 提交物清单（初赛）
 
 | # | 文档 | 位置 |
 |---|---|---|
@@ -108,6 +147,8 @@ mvn spring-boot:run
 | 8 | 演示 PPT 大纲 | `docs/08-演示PPT大纲.md` |
 | 9 | 演示视频脚本（≤7min） | `docs/09-演示视频脚本.md` |
 
-## 7. 著作权
+> 增强阶段新增文档见 `docs/`（红蓝对抗注入看板设计、执行兜底与回滚、MCP 协议合规验证报告、云服务器部署验收测试报告等）。
+
+## 8. 著作权
 
 参赛团队自主开发部分著作权归参赛团队所有。
