@@ -1,5 +1,7 @@
 # 智御 · OS 智能运维 Agent（OpsGuard Agent）
 
+[![CI](https://github.com/anothersunset/softbei/actions/workflows/ci.yml/badge.svg)](https://github.com/anothersunset/softbei/actions/workflows/ci.yml)
+
 > 软件杯赛题作品 —— 一套部署于操作系统的**智能运维 Agent**。它作为自然语言与 OS 之间的桥梁，通过 **MCP（Model Context Protocol）** 赋予大模型「感知系统状态 → 推理决策 → 安全校验 → 受限执行 → 链路溯源」的闭环能力，核心解决 **AI 推理不可控** 带来的「误删库、误操作、危险注入」风险。
 
 ## 1. 这是什么
@@ -66,7 +68,7 @@
 - **MCP 双传输通道**：HTTP 与 stdio 复用同一 `McpDispatcher` 路由；stdio 以换行分隔 JSON-RPC，体现「MCP 运维插件化」。
 - **MCP 协议合规**：严格对齐 JSON-RPC 2.0 + MCP 规范（协议协商 / 通知 / ping / isError / annotations），MCP-01~08 用例 15/15 全 PASS。
 - **SSE 实时思维链**：`/api/ops/chat/stream` 逐阶段推送（类 ChatGPT tool_call），前端「实时思维链」面板逐节点展示并附安全评分 / 回滚建议。
-- **可观测性**：接入 `micrometer-registry-prometheus`，打通 `/actuator/prometheus` 指标端点。
+- **可观测性**：接入 `micrometer-registry-prometheus`，打通 `/actuator/prometheus` 指标端点；`deploy/grafana/opsguard-dashboard.json` 提供开箱即用看板。
 
 ### ✅ 验收证据
 
@@ -75,8 +77,9 @@
 | 安全护栏单元测试（确定性回放） | **33/33 PASS** |
 | 云服务器部署验收（腾讯云 Ubuntu，含真实 LLM provider=xiaomi） | **19/19 PASS** |
 | MCP 协议合规验证（MCP-01~08） | **15/15 PASS** |
+| 红蓝对抗注入语料回放（48 条，随 CI 持续校验） | `mvn test` 全量确定性回放（方法学见 `docs/15`，差异化与答辩见 `docs/16`） |
 
-> 仅列已归档报告对应的真实结果，不虚标。
+> 仅列已归档报告对应的真实结果，不虚标；覆盖率与实测拦截率数字以本地/CI `mvn test` 实际输出为准。
 
 ## 4. 技术栈
 
@@ -147,7 +150,7 @@ mvn spring-boot:run
 | 8 | 演示 PPT 大纲 | `docs/08-演示PPT大纲.md` |
 | 9 | 演示视频脚本（≤7min） | `docs/09-演示视频脚本.md` |
 
-> 增强阶段新增文档见 `docs/`（红蓝对抗注入看板设计、执行兜底与回滚、MCP 协议合规验证报告、云服务器部署验收测试报告等）。
+> 增强阶段新增文档见 `docs/`（红蓝对抗注入看板设计、执行兜底与回滚、MCP 协议合规验证报告、云服务器部署验收测试报告、红蓝对抗语料与CI工程化、决赛差异化与答辩Q&A 等）。
 
 ## 8. 著作权
 
