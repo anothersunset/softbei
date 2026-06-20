@@ -79,6 +79,36 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>1.16.1</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>1.2.1</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <targetClasses>
+                        <param>com.zhiqian.ops.guard.*</param>
+                        <param>com.zhiqian.ops.analyzer.*</param>
+                        <param>com.zhiqian.ops.exec.*</param>
+                        <param>com.zhiqian.ops.llm.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>com.zhiqian.ops.*</param>
+                    </targetTests>
+                    <outputFormats>
+                        <param>HTML</param>
+                        <param>CSV</param>
+                    </outputFormats>
+                    <threads>2</threads>
+                    <timeoutConst>5000</timeoutConst>
+                    <timestampedReports>false</timestampedReports>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
