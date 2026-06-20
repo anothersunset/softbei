@@ -81,4 +81,48 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          变异测试（mutation testing）：证明用例“能杀死突变”而非仅别覆盖行号，反“刷覆盖率”。
+          默认不激活，不影响 CI 的 mvn test；本地运行：
+            mvn -P mutation org.pitest:pitest-maven:mutationCoverage
+          报告输出：target/pit-reports/index.html（含 mutation score / 存活突变明细）。
+          mutation score 为实跑产生的真实指标，回填至 docs/redteam-generalization.md。
+        -->
+        <profile>
+            <id>mutation</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-maven</artifactId>
+                        <version>1.15.8</version>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.pitest</groupId>
+                                <artifactId>pitest-junit5-plugin</artifactId>
+                                <version>1.2.1</version>
+                            </dependency>
+                        </dependencies>
+                        <configuration>
+                            <targetClasses>
+                                <param>com.zhiqian.ops.guard.*</param>
+                                <param>com.zhiqian.ops.exec.*</param>
+                                <param>com.zhiqian.ops.analyzer.*</param>
+                            </targetClasses>
+                            <targetTests>
+                                <param>com.zhiqian.ops.*</param>
+                            </targetTests>
+                            <outputFormats>
+                                <param>HTML</param>
+                                <param>XML</param>
+                            </outputFormats>
+                            <timestampedReports>false</timestampedReports>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
