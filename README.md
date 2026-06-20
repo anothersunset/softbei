@@ -82,6 +82,21 @@
 
 > 上述为本地/云端 `mvn test` 实测结果（环境 JDK 17 · 代码 `1e338db`），完整记录见 `docs/17-本地测评报告.md`；方法学见 `docs/15`，差异化与答辩见 `docs/16`。
 
+### 📁 验收证据索引
+
+| 证据 | 路径 |
+|---|---|
+| 本地测评报告（单测 / 覆盖率 / 红蓝 / RCA 实跑记录） | `docs/17-本地测评报告.md` |
+| 红蓝对抗注入语料（48 条，可复跑） | `backend/src/test/resources/redteam/injection-corpus.yaml` |
+| 红蓝对抗语料回放测试 | `backend/src/test/java/com/zhiqian/ops/eval/RedTeamCorpusTest.java` |
+| 安全护栏确定性回放测试（33 例） | `backend/src/test/java/com/zhiqian/ops/eval/ScenarioEvaluationTest.java` |
+| 跨源 RCA 三类故障注入证据（OOM / DISK_FULL / IO） | `rca-evidence/*.json` |
+| MCP 协议合规验证报告（MCP-01~08） | `docs/MCP协议合规验证报告.md` |
+| 云服务器部署验收测试报告（19/19） | `docs/云服务器部署验收测试报告.md` |
+| Grafana 可观测看板（6 面板） | `deploy/grafana/opsguard-dashboard.json` |
+| CI 工程化（语料回放 + 覆盖率门禁） | `.github/workflows/ci.yml` |
+| 一键验收脚本 | `verify.sh` |
+
 ## 4. 技术栈
 
 | 层 | 选型 | 说明 |
@@ -116,6 +131,8 @@ softbei/
 │           └── static/index.html   # B/S 控制台
 ├── deploy/                  # LoongArch + 麒麟 V11 部署
 ├── docs/                    # 初赛提交文档 + 增强阶段设计/验收报告
+├── rca-evidence/            # 跨源 RCA 故障注入证据（OOM / DISK_FULL / IO）
+├── verify.sh                # 一键验收脚本
 └── README.md
 ```
 
