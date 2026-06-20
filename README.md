@@ -76,11 +76,23 @@
 |---|---|
 | 安全护栏单元测试（确定性回放） | **33/33 PASS** |
 | 红蓝对抗注入语料回放（48 条） | **48/48 PASS**：注入识别 17/17、注入误拦 0/6、危险命令拦截 10/10、正常命令误拦 0/8 |
-| 测试覆盖率（JaCoCo 实测） | 指令 43.7% · 分支 25.5% · 行 45.6% |
+| 测试覆盖率（JaCoCo 实测） | 指令 43.8% · 分支 25.6% · 行 45.7% |
 | 云服务器部署验收（腾讯云 Ubuntu，含真实 LLM provider=xiaomi） | **19/19 PASS** |
 | MCP 协议合规验证（MCP-01~08） | **15/15 PASS** |
 
-> 上述为本地/云端 `mvn test` 实测结果（环境 JDK 17 · 代码 `1e338db`），完整记录见 `docs/17-本地测评报告.md`；方法学见 `docs/15`，差异化与答辩见 `docs/16`。
+> 上述为本地/云端 `mvn test` 实测结果（环境 JDK 17 · 代码 `d812952`），完整记录见 `docs/17-本地测评报告.md`；方法学见 `docs/15`，差异化与答辩见 `docs/16`。
+
+### 📦 交付材料（`docs/_evidence/`）
+
+| 材料 | 文件 | 说明 |
+|------|------|------|
+| 演示 PPT (.pptx) | `docs/_evidence/OpsGuard-演示PPT.pptx` | 13 页，pptxgenjs 生成，深海军蓝主题 |
+| 演示 PPT (HTML) | `docs/_evidence/OpsGuard-瑞士风PPT.html` | 10 页瑞士风，浏览器直接打开 |
+| Grafana 实景看板 | `docs/_evidence/grafana-screenshot.png` | Prometheus 实数据，6 面板 |
+| JaCoCo 覆盖率 | `docs/_evidence/jacoco-overview.png` | 14 个包覆盖率明细 |
+| 红蓝对抗指标 | `docs/_evidence/redteam-metrics.png` | 4 指标全绿 |
+| 演示录屏 | `docs/_evidence/demo.cast` | asciinema 终端录屏 99s |
+| 在线演示 | https://asciinema.org/a/4RD9jGQbr16F48OQ | 浏览器可播放 |
 
 ### 📁 验收证据索引
 
