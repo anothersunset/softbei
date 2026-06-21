@@ -129,6 +129,8 @@ public class CrossSourceRca {
         return switch (id) {
             case "mem-usage" -> Set.of("OOM");
             case "disk-usage" -> Set.of("DISK_FULL", "IO");
+            case "load" -> Set.of("NETWORK", "DEPENDENCY");
+            case "zombie" -> Set.of("DEPENDENCY", "CONFIG");
             default -> Set.of();
         };
     }
@@ -147,12 +149,15 @@ public class CrossSourceRca {
     }
 
     private String kindLabel(List<LogEvent> matched) {
-        boolean oom = false, io = false, df = false;
+        boolean oom = false, io = false, df = false, net = false, dep = false, cfg = false;
         for (LogEvent e : matched) {
             switch (e.kind()) {
                 case "OOM" -> oom = true;
                 case "IO" -> io = true;
                 case "DISK_FULL" -> df = true;
+                case "NETWORK" -> net = true;
+                case "DEPENDENCY" -> dep = true;
+                case "CONFIG" -> cfg = true;
                 default -> { }
             }
         }
@@ -160,6 +165,9 @@ public class CrossSourceRca {
         if (oom) labels.add("OOM/内存耗尽");
         if (df) labels.add("磁盘写满");
         if (io) labels.add("磁盘 I/O");
+        if (net) labels.add("网络故障");
+        if (dep) labels.add("依赖服务异常");
+        if (cfg) labels.add("配置错误");
         return labels.isEmpty() ? "同源" : String.join("、", labels);
     }
 

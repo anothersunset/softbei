@@ -245,13 +245,16 @@ public class InspectionService {
         long now = System.currentTimeMillis();
         long windowMs = props.getLogWindowMinutes() * 60_000L;
         int recent = 0;
-        int oom = 0, io = 0, diskFull = 0;
+        int oom = 0, io = 0, diskFull = 0, network = 0, dependency = 0, config = 0;
         for (LogEvent e : events) {
             if (e.epochMillis() >= 0 && now - e.epochMillis() <= windowMs) recent++;
             switch (e.kind()) {
                 case "OOM" -> oom++;
                 case "IO" -> io++;
                 case "DISK_FULL" -> diskFull++;
+                case "NETWORK" -> network++;
+                case "DEPENDENCY" -> dependency++;
+                case "CONFIG" -> config++;
                 default -> { }
             }
         }
@@ -263,6 +266,9 @@ public class InspectionService {
         if (oom > 0) kinds.append("OOM×").append(oom).append(' ');
         if (io > 0) kinds.append("IO×").append(io).append(' ');
         if (diskFull > 0) kinds.append("DISK_FULL×").append(diskFull).append(' ');
+        if (network > 0) kinds.append("NETWORK×").append(network).append(' ');
+        if (dependency > 0) kinds.append("DEPENDENCY×").append(dependency).append(' ');
+        if (config > 0) kinds.append("CONFIG×").append(config).append(' ');
         String evidence = "匹配到 " + count + " 条错误级日志"
                 + "（近 " + props.getLogWindowMinutes() + " 分钟内 " + recent + " 条）"
                 + (kinds.length() > 0 ? "；关键类型：" + kinds.toString().trim() : "");
@@ -416,6 +422,26 @@ public class InspectionService {
                 || lc.contains("buffer i/o") || (lc.contains("xfs") && lc.contains("error"))) {
             return "IO";
         }
+        if (lc.contains("connection refused") || lc.contains("connection timed out")
+                || lc.contains("ehostunreach") || lc.contains("enetunreach")
+                || lc.contains("no route to host") || lc.contains("network is unreachable")
+                || lc.contains("dns resolution") || lc.contains("name resolution")
+                || lc.contains("temporary failure in name resolution")) {
+            return "NETWORK";
+        }
+        if (lc.contains("service unavailable") || lc.contains("upstream")
+                || lc.contains("circuit breaker") || lc.contains("502 bad gateway")
+                || lc.contains("503 service unavailable") || lc.contains("504 gateway timeout")
+                || lc.contains("dependency") || lc.contains("backend unhealthy")
+                || lc.contains("connection pool exhausted")) {
+            return "DEPENDENCY";
+        }
+        if (lc.contains("config") && (lc.contains("error") || lc.contains("invalid") || lc.contains("syntax")))
+            return "CONFIG";
+        if (lc.contains("configuration") && (lc.contains("parse") || lc.contains("fail")))
+            return "CONFIG";
+        if (lc.contains("invalid configuration") || lc.contains("malformed config"))
+            return "CONFIG";
         return "OTHER";
     }
 }
