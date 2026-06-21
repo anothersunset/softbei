@@ -90,7 +90,7 @@
 
 | 项目 | 结果 |
 |---|---|
-| 安全护栏单元测试 + Mock 覆盖 | **168/168 PASS**（含 guard/pipeline/exec/inspect/controller 测试） |
+| 安全护栏单元测试 + Mock 覆盖 | **169/169 PASS**（含 guard/pipeline/exec/inspect/controller 测试） |
 | 红蓝对抗注入语料回放（48 条） | **48/48 PASS**：注入识别 17/17、注入误拦 0/6、危险命令拦截 10/10、正常命令误拦 0/8 |
 | 盲测泛化评测（OOD，未参与调参） | 混淆矩阵 + P/R/F1 由 `BlindsetRunnerTest` 实跑产生（见 `docs/redteam-generalization.md`） |
 | 测试覆盖率（JaCoCo 实测） | 指令 75.6% · 分支 60.2% · 行 75.5% |
