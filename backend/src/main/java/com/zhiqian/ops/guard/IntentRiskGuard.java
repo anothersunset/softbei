@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 
 /**
  * 意图风险校验器：对大模型生成的原始指令做"二次过滤"。
- * 裁决顺序：shell 元字符 -> 红线正则 -> 关键路径上的变更 -> 变更类二进制 -> 只读白名单 -> 默认 REVIEW。
+ * 裁决顺序：只读管道白名单 -> shell 元字符 -> 红线正则 -> 关键路径上的变更 -> 变更类二进制 -> 只读白名单 -> 默认 REVIEW。
  */
 @Component
 public class IntentRiskGuard {
@@ -29,6 +29,13 @@ public class IntentRiskGuard {
             return new RiskDecision(command, RiskLevel.BLOCK, "空指令", "empty");
         }
         String cmd = command.trim();
+
+        // 0. 纯只读管道放行：各段均为只读命令、且不含管道以外的其它元字符时判定 SAFE
+        //    （修复只读命令组合使用管道符被误拦的可用性问题，安全前提不变）
+        if (cmd.contains("|") && isReadOnlyPipeline(cmd)) {
+            return new RiskDecision(cmd, RiskLevel.SAFE,
+                    "只读/感知类管道指令（各段均为只读命令）", "readOnlyPipeline");
+        }
 
         // 1. shell 元字符：防止命令拼接/重定向/注入
         for (String mc : rules.getBlockedMetacharacters()) {
@@ -73,6 +80,40 @@ public class IntentRiskGuard {
         // 6. 未知二进制 -> 默认 REVIEW（最小信任原则）
         return new RiskDecision(cmd, RiskLevel.REVIEW,
                 "未在白名单内的指令（" + binary + "），默认需人工确认", "unknown");
+    }
+
+    /**
+     * 判断是否为「纯只读管道」：以 | 分段后，每段首个二进制都在只读白名单内，
+     * 且段内不含除管道外的其它被禁元字符。仅此情形放行为 SAFE，其余仍按原逻辑拦截。
+     */
+    private boolean isReadOnlyPipeline(String cmd) {
+        String[] segments = cmd.split("\\|");
+        if (segments.length < 2) {
+            return false;
+        }
+        for (String seg : segments) {
+            String s = seg.trim();
+            if (s.isEmpty()) {
+                return false;
+            }
+            for (String mc : rules.getBlockedMetacharacters()) {
+                if ("|".equals(mc)) {
+                    continue;
+                }
+                if (s.contains(mc)) {
+                    return false;
+                }
+            }
+            List<String> argv = tokenize(s);
+            if (argv.isEmpty()) {
+                return false;
+            }
+            String binary = basename(argv.get(0));
+            if (!rules.getReadOnlyBinaries().contains(binary)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean touchesCriticalPath(List<String> argv) {
