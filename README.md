@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/anothersunset/softbei/actions/workflows/ci.yml/badge.svg)](https://github.com/anothersunset/softbei/actions/workflows/ci.yml)
 
-> 软件杯赛题作品 —— 一套部署于操作系统的**智能运维 Agent**。它作为自然语言与 OS 之间的桥梁，通过 **MCP（Model Context Protocol）** 赋予大模型「感知系统状态 → 推理决策 → 安全校验 → 受限执行 → 链路滯源」的闭环能力，核心解决 **AI 推理不可控** 带来的「误删库、误操作、危险注入」风险。
+> 软件杯赛题作品 —— 一套部署于操作系统的**智能运维 Agent**。它作为自然语言与 OS 之间的桥梁，通过 **MCP（Model Context Protocol）** 赋予大模型「感知系统状态 → 推理决策 → 安全校验 → 受限执行 → 链路溯源」的闭环能力，核心解决 **AI 推理不可控** 带来的「误删库、误操作、危险注入」风险。
 
 ## ✨ 一句话定位
 
@@ -27,7 +27,7 @@
 2. **推理决策**：由大模型生成处置方案与候选指令；
 3. **安全护栏校验**：识别候选指令中的高危参数（如 `rm -rf`、关键路径、`chmod 777`），判断该文件是否为**关键数据库日志**、当前权限是否合规；
 4. **最小权限执行**：在受限账户下执行，非必要不用 root；
-5. **链路滯源**：完整记录闭环日志，支持异常回滯。
+5. **链路溯源**：完整记录闭环日志，支持异常回溯。
 
 ## 2. 安全护栏架构（核心）
 
@@ -58,7 +58,7 @@
 [⑦ 跨源根因分析 CrossSourceRca]          ── 指标↔日志时间窗口关联 + L1–L3 分级处置
    │
    ▼
-[全程：链路滯源 OpsAuditService] ── RECEIVE→INJECTION_GUARD→SENSE→RETRIEVE→REASON→GUARD→EXECUTE→ANALYZE 闭环 JSONL
+[全程：链路溯源 OpsAuditService] ── RECEIVE→INJECTION_GUARD→SENSE→RETRIEVE→REASON→GUARD→EXECUTE→ANALYZE 闭环 JSONL
 ```
 
 ## 3. ✨ 新增亮点能力（差异化）
@@ -72,7 +72,7 @@
 - **盲测泛化评测（新）**：`blindset-corpus.yaml` 为未参与调参的对抗变体（编码/同形字/多语言/新措辞），`BlindSetCorpusTest` 输出混淆矩阵与 Precision/Recall/F1，证明「换没见过的样本也能拦」。详见 `docs/redteam-generalization.md`。
 
 ### 🔍 根因分析：从「并列罗列」到「跨源关联」
-- **跨源 RCA（指标 ↔ 日志）**：巡检采集带时间戳与分类（OOM / DISK_FULL / IO）的结构化日志事件，在 N 分钟时间窗口内做「指标异常 ↔ 日志事件」同根因关联，输出 L1–L3 分级处置与证据链。故障类型×分级×处置矩阵见 `docs/19-RCA故障分级矩阵.md`。
+- **跨源 RCA（指标 ↔ 日志）**：巡检采集带时间戳与分类（OOM / DISK_FULL / IO / 依赖雪崩 / 网络分区 / 配置漂移，共 6 类）的结构化日志事件，在 N 分钟时间窗口内做「指标异常 ↔ 日志事件」同根因关联，输出 L1–L3 分级处置与证据链。故障类型×分级×处置矩阵见 `docs/19-RCA故障分级矩阵.md`。
 - **LLM 根因总结（可选）**：真实模型下生成自然语言根因叙述；mock 路径规则回退，保证评测可复现。
 - **主动巡检 health_inspect**：只读体检 + 健康评分 + 风险预警（HEALTHY / WARNING / DEGRADED / CRITICAL），从被动响应走向主动预测。
 
@@ -121,7 +121,7 @@
 | 红蓝对抗语料回放测试 | `backend/src/test/java/com/zhiqian/ops/eval/RedTeamCorpusTest.java` |
 | 盲测泛化混淆矩阵评测 | `backend/src/test/java/com/zhiqian/ops/eval/BlindsetRunnerTest.java` |
 | 安全护栏确定性回放测试（33 例） | `backend/src/test/java/com/zhiqian/ops/eval/ScenarioEvaluationTest.java` |
-| 跨源 RCA 三类故障注入证据（OOM / DISK_FULL / IO） | `rca-evidence/*.json` |
+| 跨源 RCA 六类故障注入证据（OOM / DISK_FULL / IO / 依赖雪崩 / 网络分区 / 配置漂移） | `rca-evidence/*.json` |
 | MCP 协议合规验证报告（MCP-01~08） | `docs/MCP协议合规验证报告.md` |
 | 云服务器部署验收测试报告（19/19） | `docs/云服务器部署验收测试报告.md` |
 | Grafana 可观测看板（6 面板） | `deploy/grafana/opsguard-dashboard.json` |
@@ -133,7 +133,7 @@
 | 层 | 选型 | 说明 |
 |---|---|---|
 | 架构 | B/S | 浏览器访问控制台，后端提供 REST + MCP |
-| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用歕昇/Loongson JDK 运行 |
+| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用毕昇/Loongson JDK 运行 |
 | 大模型 | DeepSeek / Qwen3（国产开源） | 通过 `LlmClient` 抽象，内置 `MockLlmClient` 可离线演示 |
 | 协议 | MCP (JSON-RPC 2.0) | `tools/list`、`tools/call` 暴露运维插件 |
 | 前端 | 原生 HTML + JS（零构建） | 架构无关，LoongArch 直接可跑 |
@@ -151,7 +151,7 @@ softbei/
 │       │   ├── llm/         # 大模型客户端（DeepSeek / Mock）
 │       │   ├── guard/       # 安全护栏：意图风险校验 + 抗注入 + 安全评分
 │       │   ├── exec/        # 最小权限执行器 + 熔断 + 动作账本/回滚
-│       │   ├── trace/       # 推理链路滯源审计
+│       │   ├── trace/       # 推理链路溯源审计
 │       │   ├── analyzer/    # 跨源根因分析 + 主动巡检
 │       │   ├── mcp/         # MCP JSON-RPC 端点（HTTP / stdio 双通道）
 │       │   ├── pipeline/    # 八阶段编排管线
@@ -162,7 +162,7 @@ softbei/
 │           └── static/index.html   # B/S 控制台
 ├── deploy/                  # LoongArch + 麒麟 V11 部署
 ├── docs/                    # 初赛提交文档 + 增强阶段设计/验收报告
-├── rca-evidence/            # 跨源 RCA 故障注入证据（OOM / DISK_FULL / IO）
+├── rca-evidence/            # 跨源 RCA 故障注入证据（6 类：OOM / DISK_FULL / IO / 依赖雪崩 / 网络分区 / 配置漂移）
 ├── verify.sh                # 一键验收脚本
 └── README.md
 ```
@@ -191,18 +191,18 @@ mvn -P mutation org.pitest:pitest-maven:mutationCoverage
 # 报告：target/pit-reports/index.html
 ```
 
-详见 `docs/06-软件安装包及部署文档.md`。
+详见 `docs/06-安装部署文档.md`。
 
 ## 7. 提交物清单（初赛）
 
 | # | 文档 | 位置 |
 |---|---|---|
-| 1 | 软件功能需求分析文档 | `docs/01-软件功能需求分析文档.md` |
-| 2 | 软件功能设计文档 | `docs/02-软件功能设计文档.md` |
-| 3 | 软件产品说明书 | `docs/03-软件产品说明书.md` |
-| 4 | 软件功能测试报告 | `docs/04-软件功能测试报告.md` |
-| 5 | 软件性能测试报告 | `docs/05-软件性能测试报告.md` |
-| 6 | 软件安装包及部署文档 | `docs/06-软件安装包及部署文档.md` |
+| 1 | 软件功能需求分析文档 | `docs/01-需求分析.md` |
+| 2 | 软件功能设计文档 | `docs/02-功能设计.md` |
+| 3 | 软件产品说明书 | `docs/03-产品说明书.md` |
+| 4 | 软件功能测试报告 | `docs/04-功能测试报告.md` |
+| 5 | 软件性能测试报告 | `docs/05-性能测试报告.md` |
+| 6 | 软件安装包及部署文档 | `docs/06-安装部署文档.md` |
 | 7 | 源代码 | 本仓库 `backend/` |
 | 8 | 演示 PPT 大纲 | `docs/08-演示PPT大纲.md` |
 | 9 | 演示视频脚本（≤7min） | `docs/09-演示视频脚本.md` |
