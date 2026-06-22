@@ -6,7 +6,7 @@
 #
 # 功能:
 #   1. 监听 Notion 页面变化
-#   2. 自动同步到本地文件
+#   2. 提取代码围栏内容并自动同步到本地文件
 #   3. 运行编译和测试
 #   4. 测试通过后自动推送到 GitHub
 # ============================================================
@@ -32,6 +32,35 @@ log_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 log_success() { echo -e "${GREEN}✅ $1${NC}"; }
 log_error() { echo -e "${RED}❌ $1${NC}"; }
 log_warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
+
+# 从 Markdown 中提取代码围栏内容
+# 用法: extract_block "<原始内容>" "<语言>"   (语言为空表示任意语言的第一个围栏)
+extract_block() {
+    printf '%s\n' "$1" | awk -v want="$2" '
+        BEGIN { inb=0; ok=0; finished=0 }
+        finished==1 { next }
+        /^[[:space:]]*```/ {
+            if (inb==0) {
+                lang=$0
+                sub(/^[[:space:]]*```[[:space:]]*/, "", lang)
+                split(lang, a, /[[:space:]]+/)
+                lang=a[1]
+                inb=1
+                if (want=="" || tolower(lang)==tolower(want)) ok=1; else ok=0
+                next
+            } else {
+                inb=0
+                if (ok==1) finished=1
+                ok=0
+                next
+            }
+        }
+        inb==1 && ok==1 { print }
+    '
+}
+
+# 判断字符串是否为空白
+is_blank() { [ -z "$(printf '%s' "$1" | tr -d '[:space:]')" ]; }
 
 # 初始化
 LAST_CONTENT=""
@@ -62,7 +91,7 @@ while true; do
         continue
     fi
 
-    # 2. 检查是否有变化
+    # 2. 检查是否有变化（比较整页原始内容）
     if [ "$CURRENT_CONTENT" != "$LAST_CONTENT" ]; then
         SYNC_COUNT=$((SYNC_COUNT + 1))
         echo ""
@@ -70,7 +99,19 @@ while true; do
         log_info "检测到变化！(第 ${SYNC_COUNT} 次同步)"
         echo "------------------------------------------"
 
-        # 3. 同步到本地文件
+        # 3. 提取代码围栏并同步到本地文件
+        log_info "提取代码（优先 java 代码围栏）..."
+        CODE_CONTENT="$(extract_block "$CURRENT_CONTENT" java)"
+        if is_blank "$CODE_CONTENT"; then
+            CODE_CONTENT="$(extract_block "$CURRENT_CONTENT" "")"
+        fi
+        if is_blank "$CODE_CONTENT"; then
+            log_warn "未检测到代码围栏，回退为整页原始内容（可能不是合法代码，请检查 Notion 页面是否包含代码块）"
+            CODE_CONTENT="$CURRENT_CONTENT"
+        else
+            log_success "已从代码围栏提取代码"
+        fi
+
         log_info "同步到本地文件..."
         FULL_PATH="$PROJECT_DIR/$TARGET_FILE"
 
@@ -78,7 +119,7 @@ while true; do
         mkdir -p "$(dirname "$FULL_PATH")"
 
         # 保存文件
-        echo "$CURRENT_CONTENT" > "$FULL_PATH"
+        printf '%s\n' "$CODE_CONTENT" > "$FULL_PATH"
         log_success "已保存到 $TARGET_FILE"
 
         # 4. 编译检查
