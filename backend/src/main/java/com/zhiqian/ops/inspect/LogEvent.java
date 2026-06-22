@@ -11,6 +11,6 @@ package com.zhiqian.ops.inspect;
 public record LogEvent(
         String time,        // ISO-8601 时间戳(来自 journalctl -o short-iso)；无法解析时为空串
         long epochMillis,   // 解析出的毫秒时间戳；解析失败为 -1
-        String kind,        // OOM / IO / DISK_FULL / OTHER
+        String kind,        // OOM / IO / DISK_FULL / NETWORK / DEPENDENCY / CONFIG / OTHER
         String message      // 原始日志行(截断)
 ) {}

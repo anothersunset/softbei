@@ -2,6 +2,7 @@ package com.zhiqian.ops.web;
 
 import com.zhiqian.ops.agent.AgentTool;
 import com.zhiqian.ops.common.Result;
+import com.zhiqian.ops.exec.ExecProperties;
 import com.zhiqian.ops.exec.ExecResult;
 import com.zhiqian.ops.exec.LeastPrivilegeExecutor;
 import com.zhiqian.ops.exec.RollbackLedger;
@@ -10,6 +11,7 @@ import com.zhiqian.ops.guard.RiskDecision;
 import com.zhiqian.ops.guard.RiskLevel;
 import com.zhiqian.ops.guard.RollbackAdvisor;
 import com.zhiqian.ops.guard.SecurityScorer;
+import com.zhiqian.ops.llm.LlmClient;
 import com.zhiqian.ops.pipeline.ChatRequest;
 import com.zhiqian.ops.pipeline.ChatResponse;
 import com.zhiqian.ops.pipeline.OpsPipeline;
@@ -35,16 +37,21 @@ public class OpsAgentController {
     private final List<AgentTool> tools;
     private final RollbackLedger rollbackLedger;
     private final LeastPrivilegeExecutor executor;
+    private final LlmClient llm;
+    private final ExecProperties execProperties;
     private final SecurityScorer securityScorer = new SecurityScorer();
     private final CounterfactualAnalyzer counterfactual = new CounterfactualAnalyzer();
     private final RollbackAdvisor rollbackAdvisor = new RollbackAdvisor();
 
     public OpsAgentController(OpsPipeline pipeline, List<AgentTool> tools,
-                              RollbackLedger rollbackLedger, LeastPrivilegeExecutor executor) {
+                              RollbackLedger rollbackLedger, LeastPrivilegeExecutor executor,
+                              LlmClient llm, ExecProperties execProperties) {
         this.pipeline = pipeline;
         this.tools = tools;
         this.rollbackLedger = rollbackLedger;
         this.executor = executor;
+        this.llm = llm;
+        this.execProperties = execProperties;
     }
 
     @PostMapping("/chat")
@@ -87,6 +94,21 @@ public class OpsAgentController {
             list.add(m);
         }
         return Result.ok(list);
+    }
+
+    @GetMapping("/runtime")
+    public Result<Map<String, Object>> runtime() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        boolean realLlm = llm != null && llm.isReal();
+        out.put("llmProvider", llm == null ? "unknown" : llm.providerName());
+        out.put("llmReal", realLlm);
+        out.put("llmMode", realLlm ? "REAL" : "MOCK");
+        out.put("mockDeterministic", !realLlm);
+        out.put("dryRun", execProperties == null || execProperties.isDryRun());
+        out.put("maxStepsPerRequest", execProperties == null ? null : execProperties.getMaxStepsPerRequest());
+        out.put("guardMode", "rules+normalization+human-review");
+        out.put("semanticBoundary", "LLM proposes; deterministic guards decide execution");
+        return Result.ok(out);
     }
 
     /**

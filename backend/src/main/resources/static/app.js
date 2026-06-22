@@ -37,13 +37,35 @@ function asText(v){if(v==null)return '';if(typeof v==='object')return JSON.strin
 function lvlClass(l){l=(l||'').toString().toUpperCase();if(l.indexOf('SAFE')>=0)return 'safe';if(l.indexOf('REVIEW')>=0)return 'review';if(l.indexOf('BLOCK')>=0)return 'block';return 'gray'}
 function rcaLvlClass(l){l=(l||'').toString().toUpperCase();if(l==='L3')return 'block';if(l==='L2')return 'review';if(l==='L1')return 'safe';return 'gray'}
 function kindClass(k){k=(k||'').toString().toLowerCase();if(k==='rule')return 'review';if(k==='history')return 'gray';return 'safe'}
-function vt(fn){if(document.startViewTransition){document.startViewTransition(fn)}else{fn()}}
+function vt(fn){
+  if(!document.startViewTransition){fn();return}
+  try{
+    var t=document.startViewTransition(fn);
+    if(t&&t.ready)t.ready.catch(function(){});
+    if(t&&t.finished)t.finished.catch(function(){});
+  }catch(e){fn()}
+}
 
 (function init(){
   $('scen').innerHTML=SCENARIOS.map((s,i)=>'<button onclick="runScenario('+i+')"><span class="tag '+s.cls+'">'+s.t+'</span><span>'+esc(s.label)+'</span></button>').join('');
   renderPipe([],null);
-  loadHealth(); loadTools();
+  loadHealth(); loadRuntime(); loadTools();
+  bindShortcuts();
 })();
+function bindShortcuts(){
+  var main=$('instr');
+  if(main){
+    main.addEventListener('keydown',function(e){
+      if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();sendChat(false)}
+    });
+  }
+  var stream=$('streamInstr');
+  if(stream){
+    stream.addEventListener('keydown',function(e){
+      if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runStream()}
+    });
+  }
+}
 function runScenario(i){$('instr').value=SCENARIOS[i].text;lastTraceId=null;$('confirmRow').style.display='none';sendChat(false)}
 
 function renderPipe(reached,blockStage){
@@ -61,6 +83,23 @@ async function loadHealth(){
     if((j.status||'').toUpperCase()==='UP'){$('healthDot').className='dot on';$('healthTxt').textContent='服务正常'}
     else{$('healthTxt').textContent='服务异常'}
   }catch(e){$('healthTxt').textContent='服务未连接'}
+}
+async function loadRuntime(){
+  var dot=$('runtimeDot'),txt=$('runtimeTxt');
+  if(!dot||!txt)return;
+  try{
+    const r=await fetch('/api/ops/runtime');const j=await r.json();
+    const d=(j&&j.data)?j.data:j;
+    const mode=(pick(d,['llmMode'])||'UNKNOWN').toString().toUpperCase();
+    const provider=pick(d,['llmProvider'])||'unknown';
+    const dry=pick(d,['dryRun']);
+    dot.className='dot '+(mode==='REAL'?(dry?'warn':'on'):'warn');
+    txt.textContent=mode.toLowerCase()+'('+provider+') · '+(dry?'dry-run':'live-exec');
+    txt.title='guard: '+(pick(d,['guardMode'])||'-')+'; boundary: '+(pick(d,['semanticBoundary'])||'-');
+  }catch(e){
+    dot.className='dot block';
+    txt.textContent='runtime 未连接';
+  }
 }
 async function loadTools(){
   try{
@@ -361,6 +400,8 @@ function renderReport(d){
     if(r.counterfactual&&r.counterfactual.length){_rb+='<div style="margin-top:6px"><b>反事实回放：</b></div><ul>'+r.counterfactual.map(function(cf){return '<li><code>'+esc(asText(pick(cf,['command'])))+'</code> — <span class="badge '+lvlClass(pick(cf,['level']))+'">'+esc((pick(cf,['irreversibility'])||'').toString())+'</span> '+esc(asText(pick(cf,['worstCase'])||''))+'</li>';}).join('')+'</ul>';}
     h+=sec('9','安全评分与反事实回放',_rb);
   }
+  $('reportEmpty').style.display='none';
+  $('reportWrap').style.display='block';
   $('reportBox').innerHTML=h;
 }
 function buildReportMarkdown(d){
@@ -563,11 +604,15 @@ function renderRedteam(){
   $('rtBox').innerHTML=h;
 }
 function switchTab(name){
-  ['result','trace','report','inspect','redteam','raw'].forEach(function(x){
+  ['result','trace','report','inspect','redteam','raw','stream'].forEach(function(x){
     var el=$('tab-'+x);if(el)el.style.display=(x===name)?'block':'none';
   });
   var tabs=document.querySelectorAll('.tab');
-  for(var i=0;i<tabs.length;i++){tabs[i].classList.toggle('on',tabs[i].getAttribute('data-tab')===name);}
+  for(var i=0;i<tabs.length;i++){
+    var on=tabs[i].getAttribute('data-tab')===name;
+    tabs[i].classList.toggle('on',on);
+    tabs[i].setAttribute('aria-selected',on?'true':'false');
+  }
 }
 function updateStats(){
   $('sTotal').textContent=stats.total;

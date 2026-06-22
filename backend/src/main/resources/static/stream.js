@@ -29,6 +29,7 @@
 
   var es = null;
   var idx = 0;
+  var pendingTimer = null;
 
   function $(id) { return document.getElementById(id); }
 
@@ -42,6 +43,13 @@
     if (b) b.disabled = running;
     var l = $('streamLoader');
     if (l) l.classList.toggle('on', running);
+  }
+
+  function clearPendingTimer() {
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
   }
 
   function summarizeOutput(stage, output) {
@@ -117,7 +125,16 @@
     var ta = $('streamInstr');
     var v = ta ? ta.value.trim() : '';
     if (!v) { if (ta) ta.focus(); return; }
+    if (!window.EventSource) {
+      var unsupported = $('streamEmpty');
+      if (unsupported) {
+        unsupported.style.display = '';
+        unsupported.textContent = '当前浏览器不支持实时事件流，请使用普通执行模式。';
+      }
+      return;
+    }
     if (es) { try { es.close(); } catch (e) {} es = null; }
+    clearPendingTimer();
     idx = 0;
     var box = $('streamBox');
     if (box) { box.innerHTML = ''; box.style.display = 'none'; }
@@ -128,21 +145,33 @@
     setBtn(true);
 
     es = new EventSource('/api/ops/chat/stream?instruction=' + encodeURIComponent(v));
+    pendingTimer = setTimeout(function () {
+      if (idx === 0 && es) {
+        try { es.close(); } catch (e) {}
+        es = null;
+        setBtn(false);
+        var emptyEl = $('streamEmpty');
+        if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = '服务暂未返回实时事件，请确认后端已启动。'; }
+      }
+    }, 2500);
     es.addEventListener('start', function () { /* 已启动 */ });
     es.addEventListener('step', function (e) {
+      clearPendingTimer();
       try { appendStep(JSON.parse(e.data)); } catch (err) {}
     });
     es.addEventListener('done', function (e) {
+      clearPendingTimer();
       try { renderDone(JSON.parse(e.data)); } catch (err) {}
       setBtn(false);
       if (es) { es.close(); es = null; }
     });
     es.addEventListener('error', function (e) {
-      // 正常结束后 readyState=CLOSED 也会触发；仅在未完成时提示
-      if (es && es.readyState !== 2 && idx === 0) {
+      // 未收到任何阶段事件时，通常是后端未启动或流端点不可用。
+      if (idx === 0) {
         var emptyEl = $('streamEmpty');
         if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = '连接中断或服务不可用，请重试。'; }
       }
+      clearPendingTimer();
       setBtn(false);
       if (es) { es.close(); es = null; }
     });
