@@ -90,8 +90,9 @@
 
 | 项目 | 结果 |
 |---|---|
-| 安全护栏单元测试 + Mock 覆盖 | **169/169 PASS**（含 guard/pipeline/exec/inspect/controller 测试） |
+| 安全护栏单元测试 + Mock 覆盖 | **170/170 PASS**（含 guard/pipeline/exec/inspect/controller 测试；+1 为真实故障增补集 RealWorldCorpusTest） |
 | 红蓝对抗注入语料回放（48 条） | **48/48 PASS**：注入识别 17/17、注入误拦 0/6、危险命令拦截 10/10、正常命令误拦 0/8 |
+| 真实故障场景增补集回放（12 条，核心 48/48 口径不变） | **12/12 PASS**（`RealWorldCorpusTest`） |
 | 盲测泛化评测（OOD，未参与调参） | 混淆矩阵 + P/R/F1 由 `BlindsetRunnerTest` 实跑产生（见 `docs/redteam-generalization.md`） |
 | 测试覆盖率（JaCoCo 实测） | 指令 75.6% · 分支 60.2% · 行 75.5% |
 | 云服务器部署验收（腾讯云 Ubuntu，含真实 LLM provider=xiaomi） | **19/19 PASS** |
@@ -119,6 +120,8 @@
 | 红蓝对抗注入语料（48 条，可复跑） | `backend/src/test/resources/redteam/injection-corpus.yaml` |
 | 盲测泛化语料（OOD 对抗变体） | `backend/src/test/resources/redteam/blindset-corpus.yaml` |
 | 红蓝对抗语料回放测试 | `backend/src/test/java/com/zhiqian/ops/eval/RedTeamCorpusTest.java` |
+| 真实故障场景增补集（12 条，独立回放，核心 48/48 不变） | `backend/src/test/resources/redteam/realworld-corpus.yaml` |
+| 真实故障增补集回放测试（12/12） | `backend/src/test/java/com/zhiqian/ops/eval/RealWorldCorpusTest.java` |
 | 盲测泛化混淆矩阵评测 | `backend/src/test/java/com/zhiqian/ops/eval/BlindsetRunnerTest.java` |
 | 安全护栏确定性回放测试（33 例） | `backend/src/test/java/com/zhiqian/ops/eval/ScenarioEvaluationTest.java` |
 | 跨源 RCA 六类故障注入证据（OOM / DISK_FULL / IO / 依赖雪崩 / 网络分区 / 配置漂移） | `rca-evidence/*.json` |
@@ -133,7 +136,7 @@
 | 层 | 选型 | 说明 |
 |---|---|---|
 | 架构 | B/S | 浏览器访问控制台，后端提供 REST + MCP |
-| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用毕昇/Loongson JDK 运行 |
+| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用歕昇/Loongson JDK 运行 |
 | 大模型 | DeepSeek / Qwen3（国产开源） | 通过 `LlmClient` 抽象，内置 `MockLlmClient` 可离线演示 |
 | 协议 | MCP (JSON-RPC 2.0) | `tools/list`、`tools/call` 暴露运维插件 |
 | 前端 | 原生 HTML + JS（零构建） | 架构无关，LoongArch 直接可跑 |
