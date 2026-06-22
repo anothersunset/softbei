@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class RagRetrievalTest {
 
-    private ContextRetriever newRetriever() {
+    private ContextRetriever newRetriever() throws Exception {
         OpsAuditService audit = new OpsAuditService("/tmp/rag-test-" + System.nanoTime() + ".jsonl");
         return new ContextRetriever(audit, new RiskRuleLoader());
     }
@@ -39,7 +39,7 @@ public class RagRetrievalTest {
     }
 
     @Test
-    void englishQuery_retrievesChineseDiskRunbook() {
+    void englishQuery_retrievesChineseDiskRunbook() throws Exception {
         ContextRetriever r = newRetriever();
         List<Evidence> ev = r.retrieve("disk full, no space left on device", 4, null);
         assertFalse(ev.isEmpty(), "英文查询应能召回依据");
@@ -48,7 +48,7 @@ public class RagRetrievalTest {
     }
 
     @Test
-    void chineseQuery_stillWorks() {
+    void chineseQuery_stillWorks() throws Exception {
         ContextRetriever r = newRetriever();
         List<Evidence> ev = r.retrieve("磁盘满了怎么清理", 4, null);
         assertFalse(ev.isEmpty());
@@ -56,7 +56,7 @@ public class RagRetrievalTest {
     }
 
     @Test
-    void blankOrNullQuery_returnsEmpty() {
+    void blankOrNullQuery_returnsEmpty() throws Exception {
         ContextRetriever r = newRetriever();
         assertTrue(r.retrieve("", 4, null).isEmpty());
         assertTrue(r.retrieve(null, 4, null).isEmpty());
