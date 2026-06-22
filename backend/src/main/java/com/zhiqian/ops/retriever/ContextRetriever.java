@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,11 +30,24 @@ import java.util.Set;
  *  3) 近期 trace 历史 —— 同类问题的处置记录（经 OpsAuditService 提供）。
  *
  * 检索算法：关键词 + IDF 加权的 BM25-lite，支持中文二元（bigram）切分，纯本地、零外部依赖；
+ * 检索前增加「双语同义词/别名扩展」层，使英文或口语化查询也能召回中文 runbook；
  * 离线或知识库为空时优雅降级为空结果，绝不抛出异常、不影响主链路。
  */
 @Component
 public class ContextRetriever {
     private static final Logger log = LoggerFactory.getLogger(ContextRetriever.class);
+
+    /**
+     * 运维术语双语同义词/别名组：查询命中组内任一表达时，则为查询补充组内全部同义表达。
+     * 用于跨语言/口语化召回，例如英文 "disk full" 也能命中中文「磁盘满 / 空间不足」runbook。
+     */
+    private static final List<String[]> SYNONYM_GROUPS = List.of(
+            new String[]{"disk", "disk full", "no space", "磁盘", "磁盘满", "磁盘空间", "空间不足", "空间"},
+            new String[]{"cpu", "load", "high load", "高负载", "负载", "进程", "process"},
+            new String[]{"port", "端口", "端口占用", "连接数", "network", "网络", "connection"},
+            new String[]{"memory", "oom", "out of memory", "内存", "内存溢出", "内存不足", "内存泄漏"},
+            new String[]{"log", "日志", "journal", "journalctl", "日志膨胀"}
+    );
 
     private final OpsAuditService audit;
     private final List<Doc> staticDocs = new ArrayList<>();
@@ -61,7 +75,7 @@ public class ContextRetriever {
             corpus.addAll(historyDocs(excludeTraceId));
             if (corpus.isEmpty()) return List.of();
 
-            Set<String> qterms = new HashSet<>(terms(query));
+            Set<String> qterms = expandTerms(query);
             if (qterms.isEmpty()) return List.of();
 
             int n = corpus.size();
@@ -95,6 +109,31 @@ public class ContextRetriever {
             log.warn("知识检索异常，降级为空：{}", e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * 对查询分词后追加双语同义词扩展：若查询词集完整包含某同义组任一成员的分词，
+     * 则把该组全部成员的分词并入查询词集，从而提升跨语言/口语化召回。
+     */
+    static Set<String> expandTerms(String query) {
+        List<String> base = terms(query);
+        Set<String> baseSet = new HashSet<>(base);
+        Set<String> out = new LinkedHashSet<>(base);
+        if (baseSet.isEmpty()) return out;
+        for (String[] group : SYNONYM_GROUPS) {
+            boolean hit = false;
+            for (String member : group) {
+                List<String> mt = terms(member);
+                if (!mt.isEmpty() && baseSet.containsAll(mt)) {
+                    hit = true;
+                    break;
+                }
+            }
+            if (hit) {
+                for (String member : group) out.addAll(terms(member));
+            }
+        }
+        return out;
     }
 
     private List<Doc> historyDocs(String excludeTraceId) {
