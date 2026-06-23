@@ -35,16 +35,24 @@
     + '.streampipe .spp.active{color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}'
     + '.streampipe .spp.halt{color:var(--block);border-color:var(--block);background:color-mix(in srgb,var(--block) 10%,#fff)}'
     + '.streampipe .spp-sep{width:9px;height:1px;background:var(--line);flex-shrink:0;margin:0 2px}'
+    + '.secsco-w{margin-top:12px}'
     + '.rb-led{margin-top:16px}'
     + '.rb-led .lbl{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--dim);margin:0 0 10px;font-weight:700}'
-    + '.rb-item{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:var(--surface-2)}'
+    + '.rb-tl{position:relative;padding-left:20px}'
+    + '.rb-tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--line)}'
+    + '.rb-item{position:relative;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:var(--surface-2)}'
     + '.rb-item.rev{border-left-color:var(--safe)}'
     + '.rb-item.man{border-left-color:var(--review)}'
+    + '.rb-tl .rb-item::before{content:"";position:absolute;left:-18px;top:14px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 0 0 1px var(--line)}'
+    + '.rb-tl .rb-item.rev::before{background:var(--safe)}'
+    + '.rb-tl .rb-item.man::before{background:var(--review)}'
     + '.rb-top{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}'
     + '.rb-top code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:#24344d;word-break:break-word}'
     + '.rb-cmd{font-size:12px;color:var(--dim);margin-top:8px}'
     + '.rb-cmd code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--safe);word-break:break-word}'
     + '.rb-manual{font-size:12px;color:var(--review);margin-top:8px;line-height:1.6}'
+    + '.rb-flow{font-size:11px;color:var(--faint);margin-top:8px;letter-spacing:.3px}'
+    + '.rb-flow b{color:var(--dim);font-weight:700;margin:0 2px}'
     + '.rb-none{font-size:12.5px;color:var(--faint);margin-top:10px}';
 
   var es = null;
@@ -170,7 +178,34 @@
     renderPipe();
   }
 
-  /** 可视化一键回滚动作账本：逐条展示原始变更、是否可自动回滚、补偿命令或人工恢复指引。 */
+  /** 将安全评分展开为三维条：静态风险/30 · 动态意图审计/35 · 受限执行/35，并列出评分明细。 */
+  function renderScore(sec) {
+    if (!sec || sec.score == null) return '';
+    var gc = String(sec.grade || '').trim().charAt(0).toLowerCase();
+    if ('abcd'.indexOf(gc) < 0) gc = 'b';
+    function dim(name, val, max, cls) {
+      if (val == null) return '';
+      var pct = Math.max(0, Math.min(100, Math.round((val / max) * 100)));
+      return '<div class="dim"><span class="dn">' + name + '</span>'
+        + '<span class="bar ' + cls + '"><i style="width:' + pct + '%"></i></span>'
+        + '<span class="dv">' + esc(val) + '/' + max + '</span></div>';
+    }
+    var dims = dim('静态风险', sec.staticRisk, 30, 's')
+      + dim('动态意图审计', sec.dynamicAudit, 35, 'd')
+      + dim('受限执行', sec.restrictedExec, 35, 'e');
+    var notes = '';
+    if (Array.isArray(sec.notes) && sec.notes.length) {
+      notes = '<ul class="secnotes">' + sec.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>';
+    }
+    return '<div class="secsco ' + gc + ' secsco-w">'
+      + '<div class="si">'
+      + '<div class="hd"><span class="sc">' + esc(sec.score) + '</span><span class="gr">' + esc(sec.grade || '') + '</span></div>'
+      + (dims ? '<div class="dims">' + dims + '</div>' : '')
+      + notes
+      + '</div></div>';
+  }
+
+  /** 可视化一键回滚动作账本（时间线）：逐条展示原始变更、是否可自动回滚、补偿命令或人工恢复指引，并标注变更→补偿→dry-run 流向。 */
   function renderLedger(plan, status) {
     if (!Array.isArray(plan) || plan.length === 0) {
       if (status === 'EXECUTED') {
@@ -188,6 +223,10 @@
       var body = '';
       if (p.compensate) body += '<div class="rb-cmd">补偿命令：<code>' + esc(p.compensate) + '</code></div>';
       if (p.manual) body += '<div class="rb-manual">' + esc(p.manual) + '</div>';
+      var flow = rev
+        ? '变更 <b>&rarr;</b> 补偿脚本 <b>&rarr;</b> dry-run 可回滚'
+        : '变更 <b>&rarr;</b> 需人工恢复（无幂等逆操作）';
+      body += '<div class="rb-flow">' + flow + '</div>';
       return '<div class="rb-item ' + (rev ? 'rev' : 'man') + '">'
         + '<div class="rb-top"><code>' + esc(p.origin) + '</code>' + badge + '</div>'
         + body
@@ -195,7 +234,7 @@
     }).join('');
     return '<div class="rb-led">'
       + '<div class="lbl">一键回滚账本 · 共 ' + plan.length + ' 项（可自动 ' + autoN + ' 项）</div>'
-      + rows
+      + '<div class="rb-tl">' + rows + '</div>'
       + '</div>';
   }
 
@@ -212,14 +251,12 @@
       + '<span class="msg">' + esc(resp.message || '') + '</span>'
       + (resp.traceId ? '<span class="tid mono">' + esc(resp.traceId) + '</span>' : '')
       + '</div>');
-    if (sec && (sec.score != null)) {
-      parts.push('<div style="font-size:12.5px;color:var(--dim);margin-top:4px">安全评分：<b style="color:var(--text)">' + esc(sec.score) + '</b>'
-        + (sec.grade ? ' · 等级 ' + esc(sec.grade) : '') + '</div>');
-    }
+    // 安全评分三维条（静态风险 / 动态意图审计 / 受限执行）
+    parts.push(renderScore(sec));
     if (resp.analysis) {
       parts.push('<div class="analysis" style="margin-top:12px">' + esc(resp.analysis) + '</div>');
     }
-    // 回滚账本可视化
+    // 回滚账本可视化（时间线）
     parts.push(renderLedger(resp.rollbackPlan, st));
     if (resp.traceId) {
       parts.push('<div style="margin-top:12px"><button class="btn btn-warn" style="width:auto" onclick="streamRollback(\'' + esc(resp.traceId) + '\')">一键回滚（dry-run）</button> '
