@@ -18,5 +18,10 @@
 | 依赖雪崩 | 上游超时激增 ↔ `503 Service Unavailable` / `circuit breaker` / `connection pool exhausted` | L2-L3 | 根因收敛到上游 + 熔断/限流建议 | ✅ 已落地（`rca-evidence/network-dependency-config.json`） |
 | 网络分区 | 丢包/延迟突增 ↔ `Connection refused` / `timed out` / DNS 失败 | L2-L3 | 拓扑定位 + 只读连通性诊断 | ✅ 已落地（同上） |
 | 配置漂移 | 变更后错误率陡升 ↔ `Configuration error` / `syntax error` / `parse fail` | L2-L3 | 关联最近变更 + 动作账本回滚 | ✅ 已落地（同上） |
+| **磁盘写满级联（实跑 L3）** | 磁盘 96% CRITICAL ↔ 5min 内 `No space left on device`(DISK_FULL) + `EXT4-fs error`(IO) 同源 | **L3** | 立即升级人工告警 + 处置预案 + 全程一键回滚账本 | ✅ 云端实跑（2026-06-23，置信度 97%，`rca-evidence/l3-cascade.json`） |
 
-> **L3 触发条件**：指标域 CRITICAL + 日志域同源错误类型时间窗口匹配。当前实跑环境（阿里云 ECS 1.6GB）磁盘 83%(WARN)、内存 70%(OK)、负载 0.25(OK)，无 CRITICAL 指标，故新故障类型以 L2 呈现。在目标麒麟/LoongArch 生产节点上，若指标达 CRITICAL 且日志匹配，将自动升级为 L3。
+> **L3 触发条件**：指标域 CRITICAL + 日志域同源错误类型时间窗口（5min）匹配（源码 `CrossSourceRca.grade`：`metricCritical && (logElevated || kindMatch)`）。
+>
+> **✅ 已实跑取得 L3（2026-06-23，阿里云 ECS）**：人为压满根分区至 **96%**（`disk-usage` CRITICAL，阈值 90%），并在 5 分钟窗口内注入同源 `No space left on device`(DISK_FULL) 与 `EXT4-fs error`(IO) 错误日志；跨源根因分析判定 **`overallLevel=L3`、置信度 97%**，生成 3 条洞察（L3 磁盘 / L2 内存 / L2 负载），证据链含「时间窗口命中同源错误日志 2 条」。证据文件：`rca-evidence/l3-cascade.json`，TraceID `34f2aaee-b0c0-4a21-925a-a9f16519b92b`。一键复跑脚本：`backend/scripts/collect-l3-evidence.sh`。
+>
+> 原约束说明仍适用：若在未压满资源的常态环境（如未压测的 ECS），指标未达 CRITICAL 时新故障类型以 L2 呈现；只有指标达 CRITICAL 且同源日志匹配才会升级为 L3。
