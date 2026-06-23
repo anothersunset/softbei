@@ -1,0 +1,41 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "report": {
+      "inspectId": "4d79b93a-267f-48dc-9011-edb1b97a16ee",
+      "traceId": "34f2aaee-b0c0-4a21-925a-a9f16519b92b",
+      "timestamp": "2026-06-23T04:07:01.008400779Z",
+      "healthScore": 30,
+      "overall": "CRITICAL",
+      "summary": "健康评分 30/100，总体状态 CRITICAL。需关注：磁盘使用率(最高分区 /)=96%(CRITICAL)；内存使用率=90%(WARN)；系统负载(1分钟/核)=1.04 (load1=2.07, 核=2)(WARN)；系统错误日志(近200条优先级<=err)=200(CRITICAL)。",
+      "findings": [
+        {"id": "disk-usage", "category": "disk", "severity": "CRITICAL", "title": "磁盘使用率(最高分区 /)", "metric": "使用率", "observed": "96%", "threshold": ">=80% 告警 / >=90% 严重", "evidence": "/dev/vda3         40901312 37220216   1790728      96% /", "suggestion": "清理 / 上的大文件/旧日志(如 /var/log)，必要时扩容；建议走主链路指令并经 REVIEW 确认"},
+        {"id": "mem-usage", "category": "memory", "severity": "WARN", "title": "内存使用率", "metric": "使用率", "observed": "90%", "threshold": ">=85% 告警 / >=95% 严重", "evidence": "total=1647528 used=1478888 (KB)", "suggestion": "排查内存占用最高的进程(ps aux --sort=-%mem)，确认是否存在泄漏；释放缓存或扩容"},
+        {"id": "load", "category": "load", "severity": "WARN", "title": "系统负载(1分钟/核)", "metric": "load1/核", "observed": "1.04 (load1=2.07, 核=2)", "threshold": ">=1.0 告警 / >=2.0 严重", "evidence": "12:06:47 up 2 days, 21:37,  0 users,  load average: 2.07, 0.57, 0.29", "suggestion": "定位高 CPU 进程(top/ps)，确认是否异常进程或突发流量；必要时限流或扩容"},
+        {"id": "zombie", "category": "process", "severity": "OK", "title": "僵尸进程数", "metric": "个数", "observed": "0", "threshold": ">=1 告警 / >=5 严重", "evidence": "检测到 0 个 Z 状态进程", "suggestion": "无僵尸进程"},
+        {"id": "ports", "category": "network", "severity": "OK", "title": "监听端口数", "metric": "数量", "observed": "15", "threshold": "仅供参考", "evidence": "当前共 15 个 TCP/UDP 监听套接字", "suggestion": "如需排查端口占用，可走主链路指令 ss -tlnp / lsof -i"},
+        {"id": "log-errors", "category": "log", "severity": "CRITICAL", "title": "系统错误日志(近200条优先级<=err)", "metric": "条数", "observed": "200", "threshold": ">=20 告警 / >=100 严重", "evidence": "匹配到 200 条错误级日志（近 5 分钟内 2 条）；关键类型：IO×1 DISK_FULL×1 NETWORK×4 DEPENDENCY×4 CONFIG×4", "suggestion": "查看最近错误(journalctl -p 3 -xb)，结合知识库 runbook 定位故障源"}
+      ],
+      "sources": ["df -P", "free", "uptime + nproc", "ps -eo stat", "ss -H -tuln", "journalctl -p 3 -n 200 -o short-iso"],
+      "recentLogEvents": [
+        {"time": "2026-06-20T14:27:06+0800", "epochMillis": 1781936826000, "kind": "OTHER", "message": "..."},
+        {"time": "2026-06-23T12:06:43+0800", "epochMillis": 1782187603000, "kind": "DISK_FULL", "message": "2026-06-23T12:06:43+0800 iZ7xv4963g01rivb3x0bvrZ root [388418]: no space left on device: write error on /var/log/app.log"},
+        {"time": "2026-06-23T12:06:43+0800", "epochMillis": 1782187603000, "kind": "IO", "message": "2026-06-23T12:06:43+0800 iZ7xv4963g01rivb3x0bvrZ root [388419]: EXT4-fs error (device vda1): reading directory lblock"}
+      ],
+      "elapsedMs": 13944
+    },
+    "rca": {
+      "inspectId": "4d79b93a-267f-48dc-9011-edb1b97a16ee",
+      "traceId": "34f2aaee-b0c0-4a21-925a-a9f16519b92b",
+      "overallLevel": "L3",
+      "summary": "跨源根因分析共生成 3 条洞察，最高处置等级 L3。其中 1 项指标达严重阈值，且与错误日志跨源印证，研判为关联性故障，建议立即升级人工处置。",
+      "insights": [
+        {"level": "L3", "domain": "disk", "title": "磁盘使用率(最高分区 /) 根因研判", "correlation": "在 5 分钟时间窗口内，指标异常(磁盘使用率(最高分区 /)=96%) 与 journal 中 2 条 磁盘写满、磁盘 I/O 错误(最近一条 @2026-06-23T12:06:43+0800)同时出现，时间窗口跨源关联，高置信判定为同一根因", "rootCause": "磁盘空间接近写满，极可能导致服务写入失败、日志中断或数据库异常；journal 已出现空间写满 / 磁盘 I/O 错误事件，证实磁盘问题已影响实际读写，二者为同一根因", "recommendation": "清理 / 上的大文件/旧日志(如 /var/log)，必要时扩容；建议走主链路指令并经 REVIEW 确认（处置须走主链路：高危指令经 REVIEW + 人工确认后执行，并保留一键回滚账本）", "disposition": "立即升级人工并告警；按处置预案执行，全程保留一键回滚账本", "confidence": 97, "evidenceChain": ["[指标] 磁盘使用率(最高分区 /): 96% (阈值 >=80% 告警 / >=90% 严重，CRITICAL)", "[指标证据] /dev/vda3         40901312 37220216   1790728      96% /", "[时间窗口] 窗口=5min，命中同源错误日志 2 条：", "@2026-06-23T12:06:43+0800 [DISK_FULL] 2026-06-23T12:06:43+0800 iZ7xv4963g01rivb3x0bvrZ root [388418]: no space left on device: write error on /var/log/app.log", "@2026-06-23T12:06:43+0800 [IO] 2026-06-23T12:06:43+0800 iZ7xv4963g01rivb3x0bvrZ root [388419]: EXT4-fs error (device vda1): reading directory lblock"]},
+        {"level": "L2", "domain": "memory", "title": "内存使用率 根因研判", "correlation": "指标异常(内存使用率=90%) 与 系统错误日志(200 条 err 级，CRITICAL) 在同一巡检窗口内同时升高，跨源相互印证，判定为关联事件", "rootCause": "内存使用率偏高，疑似存在缓存堆积或进程内存泄漏", "recommendation": "排查内存占用最高的进程(ps aux --sort=-%mem)，确认是否存在泄漏；释放缓存或扩容（处置须走主链路：高危指令经 REVIEW + 人工确认后执行，并保留一键回滚账本）", "disposition": "生成处置预案，经人工确认后走护栏执行", "confidence": 70, "evidenceChain": ["[指标] 内存使用率: 90% (阈值 >=85% 告警 / >=95% 严重，WARN)", "[指标证据] total=1647528 used=1478888 (KB)", "[日志] 系统错误日志: 200 条 (CRITICAL)", "[日志证据] 匹配到 200 条错误级日志（近 5 分钟内 2 条）；关键类型：IO×1 DISK_FULL×1 NETWORK×4 DEPENDENCY×4 CONFIG×4"]},
+        {"level": "L2", "domain": "load", "title": "系统负载(1分钟/核) 根因研判", "correlation": "指标异常(系统负载(1分钟/核)=1.04 (load1=2.07, 核=2)) 与 系统错误日志(200 条 err 级，CRITICAL) 在同一巡检窗口内同时升高，跨源相互印证，判定为关联事件", "rootCause": "系统负载偏高，存在性能瓶颈苗头", "recommendation": "定位高 CPU 进程(top/ps)，确认是否异常进程或突发流量；必要时限流或扩容（处置须走主链路：高危指令经 REVIEW + 人工确认后执行，并保留一键回滚账本）", "disposition": "生成处置预案，经人工确认后走护栏执行", "confidence": 70, "evidenceChain": ["[指标] 系统负载(1分钟/核): 1.04 (load1=2.07, 核=2) (阈值 >=1.0 告警 / >=2.0 严重，WARN)", "[指标证据] 12:06:47 up 2 days, 21:37,  0 users,  load average: 2.07, 0.57, 0.29", "[日志] 系统错误日志: 200 条 (CRITICAL)", "[日志证据] 匹配到 200 条错误级日志（近 5 分钟内 2 条）；关键类型：IO×1 DISK_FULL×1 NETWORK×4 DEPENDENCY×4 CONFIG×4"]}
+      ]
+    },
+    "llmEnabled": false
+  }
+}
