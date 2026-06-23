@@ -90,7 +90,7 @@
 
 | 项目 | 结果 |
 |---|---|
-| 安全护栏单元测试 + Mock 覆盖 | **170/170 PASS**（含 guard/pipeline/exec/inspect/controller 测试；+1 为真实故障增补集 RealWorldCorpusTest） |
+| 安全护栏单元测试 + Mock 覆盖 | **190/190 PASS**（含 guard/pipeline/exec/inspect/controller + 红蓝 @Nested 分组 + 真实故障增补集 RealWorldCorpusTest） |
 | 红蓝对抗注入语料回放（48 条） | **48/48 PASS**：注入识别 17/17、注入误拦 0/6、危险命令拦截 10/10、正常命令误拦 0/8 |
 | 真实故障场景增补集回放（12 条，核心 48/48 口径不变） | **12/12 PASS**（`RealWorldCorpusTest`） |
 | 盲测泛化评测（OOD，未参与调参） | 混淆矩阵 + P/R/F1 由 `BlindsetRunnerTest` 实跑产生（见 `docs/redteam-generalization.md`） |
