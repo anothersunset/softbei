@@ -125,6 +125,7 @@
 | 盲测泛化混淆矩阵评测 | `backend/src/test/java/com/zhiqian/ops/eval/BlindsetRunnerTest.java` |
 | 安全护栏确定性回放测试（33 例） | `backend/src/test/java/com/zhiqian/ops/eval/ScenarioEvaluationTest.java` |
 | 跨源 RCA 六类故障注入证据（OOM / DISK_FULL / IO / 依赖雪崩 / 网络分区 / 配置漂移） | `rca-evidence/*.json` |
+| 跨源 RCA **L3 级联故障实跑证据**（磁盘 96% CRITICAL ↔ 同源 DISK_FULL/IO 日志，置信度 97%，2026-06-23 云端实跑） | `rca-evidence/l3-cascade.json`（一键复跑 `backend/scripts/collect-l3-evidence.sh`） |
 | MCP 协议合规验证报告（MCP-01~08） | `docs/MCP协议合规验证报告.md` |
 | 云服务器部署验收测试报告（19/19） | `docs/云服务器部署验收测试报告.md` |
 | Grafana 可观测看板（6 面板） | `deploy/grafana/opsguard-dashboard.json` |
