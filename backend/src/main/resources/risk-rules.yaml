@@ -136,3 +136,13 @@ guard:
     - "\\bpython(3)?\\b.{0,80}(socket|subprocess|os\\.dup2)"
     - "echo\\s+-e\\s+.*\\\\x[0-9a-fA-F]{2}"
     - "base64\\s+(-d|--?decode)"
+    # ---- 盲测泛化加固（不与上方重叠，仅针对原漏拦的同源变体）----
+    # 日语：「指令/命令/规则を無視して」类越狱
+    - "(指示|命令|ルール|指令).{0,12}無視"
+    # 韩语：「〇〇 · 지시/명령/규칙 · 무시」类越狱
+    - "(지시|명령|규칙).{0,8}무시"
+    # 英文角色劫持：「from now on you are ...」 / 「(with) no restrictions/limits」
+    - "from\\s+now\\s+on\\s+you\\s+are\\s+(a|an)\\b"
+    - "(with\\s+)?no\\s+(restrictions|limits|constraints|boundaries)\\b"
+    # 中文社工诱导：「显示/输出/告诉我 ... 系统提示词/提示词」
+    - "(显示|展示|输出|打印|告诉我|发我|给我).{0,12}(系统提示|提示词|system\\s*prompt|系统指令)"
