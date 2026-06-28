@@ -18,10 +18,13 @@
 | 依赖雪崩 | 上游超时激增 ↔ `503 Service Unavailable` / `circuit breaker` / `connection pool exhausted` | L2-L3 | 根因收敛到上游 + 熔断/限流建议 | ✅ 已落地（`rca-evidence/network-dependency-config.json`） |
 | 网络分区 | 丢包/延迟突增 ↔ `Connection refused` / `timed out` / DNS 失败 | L2-L3 | 拓扑定位 + 只读连通性诊断 | ✅ 已落地（同上） |
 | 配置漂移 | 变更后错误率陡升 ↔ `Configuration error` / `syntax error` / `parse fail` | L2-L3 | 关联最近变更 + 动作账本回滚 | ✅ 已落地（同上） |
-| **磁盘写满级联（实跑 L3）** | 磁盘 96% CRITICAL ↔ 5min 内 `No space left on device`(DISK_FULL) + `EXT4-fs error`(IO) 同源 | **L3** | 立即升级人工告警 + 处置预案 + 全程一键回滚账本 | ✅ 云端实跑（2026-06-23，置信度 97%，`rca-evidence/l3-cascade.json`） |
+| **磁盘写满级联（实跳 L3）** | 磁盘 96% CRITICAL ↔ 5min 内 `No space left on device`(DISK_FULL) + `EXT4-fs error`(IO) 同源 | **L3** | 立即升级人工告警 + 处置预案 + 全程一键回滚账本 | ✅ 云端实跳（2026-06-23，置信度97%，`rca-evidence/l3-cascade.json`） |
+| **麒麟 LoongArch 真机实跳 L3** | 磁盘 91% CRITICAL ↔ 5min 内 DISK_FULL×2 + IO×2 同源 | **L3** | 立即升级人工告警 + 处置预案 + 全程一键回滚账本 | ✅ 龙芯麒麟 V11 实跳（2026-06-29，置信度90%，`backend/rca-evidence/l3-cascade-kylin.json`） |
 
 > **L3 触发条件**：指标域 CRITICAL + 日志域同源错误类型时间窗口（5min）匹配（源码 `CrossSourceRca.grade`：`metricCritical && (logElevated || kindMatch)`）。
 >
-> **✅ 已实跑取得 L3（2026-06-23，阿里云 ECS）**：人为压满根分区至 **96%**（`disk-usage` CRITICAL，阈值 90%），并在 5 分钟窗口内注入同源 `No space left on device`(DISK_FULL) 与 `EXT4-fs error`(IO) 错误日志；跨源根因分析判定 **`overallLevel=L3`、置信度 97%**，生成 3 条洞察（L3 磁盘 / L2 内存 / L2 负载），证据链含「时间窗口命中同源错误日志 2 条」。证据文件：`rca-evidence/l3-cascade.json`，TraceID `34f2aaee-b0c0-4a21-925a-a9f16519b92b`。一键复跑脚本：`backend/scripts/collect-l3-evidence.sh`。
+> **✅ 已实跳取得 L3（2026-06-23，阿里云 ECS）**：人为压满根分区至 **96%**（`disk-usage` CRITICAL，阈值 90%），并在 5 分钟窗口内注入同源 `No space left on device`(DISK_FULL) 与 `EXT4-fs error`(IO) 错误日志；跨源根因分析判定 **`overallLevel=L3`、置信度 97%**，生成 3 条洞察（L3 磁盘 / L2 内存 / L2 负载），证据链含「时间窗口命中同源错误日志 2 条」。证据文件：`rca-evidence/l3-cascade.json`，TraceID `34f2aaee-b0c0-4a21-925a-a9f16519b92b`。一键复跑脚本：`backend/scripts/collect-l3-evidence.sh`。
+>
+> **✅ 国产化目标环境实跳 L3（2026-06-29，龙芯 LoongArch + 麒麟高级服务器版 V11）**：在自主指令系统 **LoongArch** 架构、麒麟 **V11**（`klas-root` LVM）真机上，人为压满根分区至 **91%**（`disk-usage` CRITICAL），并在 5 分钟窗口内注入同源 `No space left on device`(DISK_FULL×2) 与 `EXT4-fs error`(IO×2) 错误日志；跨源根因分析判定 **`overallLevel=L3`、置信度 90%**，生成 1 条 L3 磁盘洞察（本次内存 39%/负载 0.95 均为 OK，故仅磁盘单洞察），证据链含「时间窗口命中同源错误日志 4 条」。inspectId `17211423-061b-4ef0-851a-6028a0d72d00`，TraceID `c4ba9766-eb16-47df-8f22-832b52a6d789`。证据文件：`backend/rca-evidence/l3-cascade-kylin.json`；一键复跑：`backend/scripts/collect-l3-evidence-kylin.sh`；部署/取证全流程见 `docs/22-龙芯麒麟V11部署与L3取证runbook.md`。**该结果直接覆盖赛题「软件需部署在 LoongArch + 麒麟 V11 运行」的硬性要求。**
 >
 > 原约束说明仍适用：若在未压满资源的常态环境（如未压测的 ECS），指标未达 CRITICAL 时新故障类型以 L2 呈现；只有指标达 CRITICAL 且同源日志匹配才会升级为 L3。

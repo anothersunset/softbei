@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/anothersunset/softbei/actions/workflows/ci.yml/badge.svg)](https://github.com/anothersunset/softbei/actions/workflows/ci.yml)
 
-> 软件杯赛题作品 —— 一套部署于操作系统的**智能运维 Agent**。它作为自然语言与 OS 之间的桥梁，通过 **MCP（Model Context Protocol）** 赋予大模型「感知系统状态 → 推理决策 → 安全校验 → 受限执行 → 链路溯源」的闭环能力，核心解决 **AI 推理不可控** 带来的「误删库、误操作、危险注入」风险。
+> 软件杯赛题作品 —— 一套部署于操作系统的**智能运维 Agent**。它作为自然语言与 OS 之间的桥梁，通过 **MCP（Model Context Protocol）** 赋予大模型「感知系统状态 → 推理决策 → 安全校验 → 受限执行 → 链路滯源」的闭环能力，核心解决 **AI 推理不可控** 带来的「误删库、误操作、危险注入」风险。
 
 ## ✨ 一句话定位
 
@@ -27,7 +27,7 @@
 2. **推理决策**：由大模型生成处置方案与候选指令；
 3. **安全护栏校验**：识别候选指令中的高危参数（如 `rm -rf`、关键路径、`chmod 777`），判断该文件是否为**关键数据库日志**、当前权限是否合规；
 4. **最小权限执行**：在受限账户下执行，非必要不用 root；
-5. **链路溯源**：完整记录闭环日志，支持异常回溯。
+5. **链路滯源**：完整记录闭环日志，支持异常回滯。
 
 ## 2. 安全护栏架构（核心）
 
@@ -58,7 +58,7 @@
 [⑦ 跨源根因分析 CrossSourceRca]          ── 指标↔日志时间窗口关联 + L1–L3 分级处置
    │
    ▼
-[全程：链路溯源 OpsAuditService] ── RECEIVE→INJECTION_GUARD→SENSE→RETRIEVE→REASON→GUARD→EXECUTE→ANALYZE 闭环 JSONL
+[全程：链路滯源 OpsAuditService] ── RECEIVE→INJECTION_GUARD→SENSE→RETRIEVE→REASON→GUARD→EXECUTE→ANALYZE 闭环 JSONL
 ```
 
 ## 3. ✨ 新增亮点能力（差异化）
@@ -93,7 +93,7 @@
 | 安全护栏单元测试 + Mock 覆盖 | **190/190 PASS**（含 guard/pipeline/exec/inspect/controller + 红蓝 @Nested 分组 + 真实故障增补集 RealWorldCorpusTest） |
 | 红蓝对抗注入语料回放（48 条） | **48/48 PASS**：注入识别 17/17、注入误拦 0/6、危险命令拦截 10/10、正常命令误拦 0/8 |
 | 真实故障场景增补集回放（12 条，核心 48/48 口径不变） | **12/12 PASS**（`RealWorldCorpusTest`） |
-| 盲测泛化评测（OOD，未参与调参） | 混淆矩阵 + P/R/F1 由 `BlindsetRunnerTest` 实跑产生（见 `docs/redteam-generalization.md`） |
+| 盲测泛化评测（OOD，未参与调参） | 混淆矩阵 + P/R/F1 由 `BlindsetRunnerTest` 实跳产生（见 `docs/redteam-generalization.md`） |
 | 测试覆盖率（JaCoCo 实测） | 指令 75.6% · 分支 60.2% · 行 75.5% |
 | 云服务器部署验收（腾讯云 Ubuntu，含真实 LLM provider=xiaomi） | **19/19 PASS** |
 | MCP 协议合规验证（MCP-01~08） | **15/15 PASS** |
@@ -116,7 +116,7 @@
 
 | 证据 | 路径 |
 |---|---|
-| 本地测评报告（单测 / 覆盖率 / 红蓝 / RCA 实跑记录） | `docs/17-本地测评报告.md` |
+| 本地测评报告（单测 / 覆盖率 / 红蓝 / RCA 实跳记录） | `docs/17-本地测评报告.md` |
 | 红蓝对抗注入语料（48 条，可复跑） | `backend/src/test/resources/redteam/injection-corpus.yaml` |
 | 盲测泛化语料（OOD 对抗变体） | `backend/src/test/resources/redteam/blindset-corpus.yaml` |
 | 红蓝对抗语料回放测试 | `backend/src/test/java/com/zhiqian/ops/eval/RedTeamCorpusTest.java` |
@@ -125,7 +125,8 @@
 | 盲测泛化混淆矩阵评测 | `backend/src/test/java/com/zhiqian/ops/eval/BlindsetRunnerTest.java` |
 | 安全护栏确定性回放测试（33 例） | `backend/src/test/java/com/zhiqian/ops/eval/ScenarioEvaluationTest.java` |
 | 跨源 RCA 六类故障注入证据（OOM / DISK_FULL / IO / 依赖雪崩 / 网络分区 / 配置漂移） | `rca-evidence/*.json` |
-| 跨源 RCA **L3 级联故障实跑证据**（磁盘 96% CRITICAL ↔ 同源 DISK_FULL/IO 日志，置信度 97%，2026-06-23 云端实跑） | `rca-evidence/l3-cascade.json`（一键复跑 `backend/scripts/collect-l3-evidence.sh`） |
+| 跨源 RCA **L3 级联故障实跳证据**（磁盘 96% CRITICAL ↔ 同源 DISK_FULL/IO 日志，置信度 97%，2026-06-23 云端实跳） | `rca-evidence/l3-cascade.json`（一键复跑 `backend/scripts/collect-l3-evidence.sh`） |
+| 跨源 RCA **L3 级联故障·龙芯麒麟真机实跳证据**（LoongArch + 麒麟 V11，磁盘 91% CRITICAL ↔ 同源 DISK_FULL/IO 日志，置信度 90%，2026-06-29 国产化目标环境实跳） | `backend/rca-evidence/l3-cascade-kylin.json`（一键复跑 `backend/scripts/collect-l3-evidence-kylin.sh`，部署/取证见 `docs/22-龙芯麒麟V11部署与L3取证runbook.md`） |
 | MCP 协议合规验证报告（MCP-01~08） | `docs/MCP协议合规验证报告.md` |
 | 云服务器部署验收测试报告（19/19） | `docs/云服务器部署验收测试报告.md` |
 | Grafana 可观测看板（6 面板） | `deploy/grafana/opsguard-dashboard.json` |
@@ -155,7 +156,7 @@ softbei/
 │       │   ├── llm/         # 大模型客户端（DeepSeek / Mock）
 │       │   ├── guard/       # 安全护栏：意图风险校验 + 抗注入 + 安全评分
 │       │   ├── exec/        # 最小权限执行器 + 熔断 + 动作账本/回滚
-│       │   ├── trace/       # 推理链路溯源审计
+│       │   ├── trace/       # 推理链路滯源审计
 │       │   ├── analyzer/    # 跨源根因分析 + 主动巡检
 │       │   ├── mcp/         # MCP JSON-RPC 端点（HTTP / stdio 双通道）
 │       │   ├── pipeline/    # 八阶段编排管线
