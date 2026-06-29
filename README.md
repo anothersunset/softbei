@@ -27,7 +27,7 @@
 2. **推理决策**：由大模型生成处置方案与候选指令；
 3. **安全护栏校验**：识别候选指令中的高危参数（如 `rm -rf`、关键路径、`chmod 777`），判断该文件是否为**关键数据库日志**、当前权限是否合规；
 4. **最小权限执行**：在受限账户下执行，非必要不用 root；
-5. **链路溯源**：完整记录闭环日志，支持异常回溯。
+5. **链路溯源**：完整记录闭环日志，支持异常回溺。
 
 ## 2. 安全护栏架构（核心）
 
@@ -92,6 +92,7 @@
 |---|---|
 | 安全护栏单元测试 + Mock 覆盖 | **190/190 PASS**（含 guard/pipeline/exec/inspect/controller + 红蓝 @Nested 分组 + 真实故障增补集 RealWorldCorpusTest） |
 | 【国产化】龙芯麒麟 LoongArch + 麒麟 V11 真机单测实跳 | **189/189 PASS**（Failures 0 / Errors 0 / Skipped 0，Loongson JDK17；与云端 190 差 1 个平台门控用例，详见 `docs/17` §9） |
+| 【真实国产 LLM】龙芯麒麟真机 + DeepSeek 端到端全链路实测 | **红线 BLOCK / 人工确认 / 一键回滚 / 注入拦截 / SSE 实时思维链 / 安全评分 84「B」 全通**（`/api/ops/runtime` 返回 `llmMode=REAL`，详见 `docs/17` §10） |
 | 红蓝对抗注入语料回放（48 条） | **48/48 PASS**：注入识别 17/17、注入误拦 0/6、危险命令拦截 10/10、正常命令误拦 0/8 |
 | 真实故障场景增补集回放（12 条，核心 48/48 口径不变） | **12/12 PASS**（`RealWorldCorpusTest`） |
 | 盲测泛化评测（OOD，未参与调参） | 混淆矩阵 + P/R/F1 由 `BlindsetRunnerTest` 实跳产生（见 `docs/redteam-generalization.md`） |
@@ -119,6 +120,7 @@
 | 证据 | 路径 |
 |---|---|
 | 本地测评报告（单测 / 覆盖率 / 红蓝 / RCA 实跳记录） | `docs/17-本地测评报告.md` |
+| **【真实国产 LLM 端到端实测】龙芯麒麟真机 + DeepSeek（红线 BLOCK / 人工确认+一键回滚 / 注入拦截 / SSE 实时思维链 / RAG 接地 / securityScore 84，2026-06-29）** | `docs/17-本地测评报告.md` §10（回滚 TraceID `2770bd7b-1b58-47a4-acc1-8b0908ab48af`、SSE TraceID `b3115d79-1ed9-4ff5-a597-8bb0bdc1d11f`） |
 | 红蓝对抗注入语料（48 条，可复跑） | `backend/src/test/resources/redteam/injection-corpus.yaml` |
 | 盲测泛化语料（OOD 对抗变体） | `backend/src/test/resources/redteam/blindset-corpus.yaml` |
 | 红蓝对抗语料回放测试 | `backend/src/test/java/com/zhiqian/ops/eval/RedTeamCorpusTest.java` |
@@ -141,7 +143,7 @@
 | 层 | 选型 | 说明 |
 |---|---|---|
 | 架构 | B/S | 浏览器访问控制台，后端提供 REST + MCP |
-| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用歕昇/Loongson JDK 运行 |
+| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用歕昂/Loongson JDK 运行 |
 | 大模型 | DeepSeek / Qwen3（国产开源） | 通过 `LlmClient` 抽象，内置 `MockLlmClient` 可离线演示 |
 | 协议 | MCP (JSON-RPC 2.0) | `tools/list`、`tools/call` 暴露运维插件 |
 | 前端 | 原生 HTML + JS（零构建） | 架构无关，LoongArch 直接可跑 |
