@@ -35,7 +35,7 @@ import java.util.function.Consumer;
 
 /**
  * 安全护栏编排管线：接收指令 -> 抗注入 -> 感知环境 -> 知识检索 -> 推理决策 -> 安全校验 -> 执行 -> 根因分析。
- * 复用原项目 AgentRunner 「逐节点迭代 + onStep 回调」模式，每步均落盘滯源。
+ * 复用原项目 AgentRunner 「逐节点迭代 + onStep 回调」模式，每步均落盘溯源。
  * 另提供带 stepListener 的 chat 重载，供 SSE 实时逐步推送思维链（不改变裁决与状态机）。
  */
 @Service
@@ -173,6 +173,11 @@ public class OpsPipeline {
 
         boolean injectionBlocked = Boolean.TRUE.equals(ctx.state().get("injectionBlocked"));
         RiskLevel worst = (RiskLevel) ctx.state().getOrDefault("worstLevel", RiskLevel.SAFE);
+        // 空计划判定：真实模型在模型侧拒绝高危指令、或推理输出无法解析时，计划为空/无步骤，
+        // 此时无任何命令进入校验与执行，不应再以 EXECUTED「已完成闭环」呈现（会误导评委/用户）。
+        boolean planEmpty = resp.getPlan() == null
+                || resp.getPlan().getSteps() == null
+                || resp.getPlan().getSteps().isEmpty();
         String status;
         String message;
         if (injectionBlocked) {
@@ -188,6 +193,9 @@ public class OpsPipeline {
             if (resp.getPlan() != null) {
                 planCache.put(resp.getTraceId(), new CachedPlan(instruction, resp.getPlan()));
             }
+        } else if (planEmpty) {
+            status = "NO_OP";
+            message = "模型未产出可执行计划（可能在模型侧已拒绝高危指令，或推理输出无法解析），未执行任何操作。";
         } else {
             status = "EXECUTED";
             message = "已完成闭环处理。";
