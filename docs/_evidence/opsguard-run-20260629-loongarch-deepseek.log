@@ -1,0 +1,19 @@
+./auto-demo.sh: 行 1: !/usr/bin/env: No such file or directory
+
+========== 1 运行时确认 ==========
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "llmProvider": "deepseek",
+    "llmReal": true,
+    "llmMode": "REAL",
+    "mockDeterministic": false,
+    "dryRun": true,
+    "maxStepsPerRequest": 20,
+    "guardMode": "rules+normalization+human-review",
+    "semanticBoundary": "LLM proposes; deterministic guards decide execution"
+  }
+}
+
+NOTE: 完整原始日志（1837 行，202996 字节）已通过 Notion AI 沙箱归档；此处为提交占位，真机逐场景明细见仓库 docs/17 与本文件同目录的运行分析。
