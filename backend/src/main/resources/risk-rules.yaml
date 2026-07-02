@@ -8,8 +8,10 @@ guard:
       reason: "Fork 炸弹"
     - pattern: "(^|\\s)mkfs(\\.|\\s)"
       reason: "格式化文件系统"
-    - pattern: "(^|\\s)dd\\s+.*of=/dev/"
-      reason: "直写块设备，可覆盖磁盘"
+    - pattern: "(^|\\s)kill\\s+-9\\s+(1|\\$\\$)\\b"
+      reason: "强杀 PID 1 (init/systemd) 或当前进程，可导致系统崩溃"
+    - pattern: "(^|\\s)dd\\s+.*of=/(dev/|etc/|proc/|sys/)"
+      reason: "dd 直写块设备或系统关键目录，可覆盖磁盘/配置文件"
     - pattern: "(^|\\s)(shutdown|reboot|halt|poweroff|init\\s+0)\\b"
       reason: "系统关机/重启"
     - pattern: ">\\s*/etc/(passwd|shadow|fstab|sudoers)"
@@ -106,6 +108,18 @@ guard:
     - whoami
     - id
     - dmesg
+    - ip
+    - ifconfig
+    - route
+    - ping
+    - which
+    - tasklist
+    - wmic
+    - strace
+    - dir
+
+  # 额外只读子命令/参数白名单（作为 evaluateCommandSurface 的扩展）
+  # 当二进制不在 readOnlyBinaries 中但其特定子命令为纯读取时，可枚举在此
 
   # 提示词注入 / 高危恶意意图识别模式（中英文，大小写不敏感）
   injectionPatterns:

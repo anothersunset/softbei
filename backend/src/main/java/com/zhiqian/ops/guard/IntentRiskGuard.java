@@ -8,7 +8,10 @@ import java.util.regex.Pattern;
 
 /**
  * 意图风险校验器：对大模型生成的原始指令做"二次过滤"。
- * 裁决顺序：shell 元字符 -> 红线正则 -> 参数/子命令级高风险 -> 关键路径上的变更 -> 变更类二进制 -> 只读白名单 -> 默认 REVIEW。
+ * 裁决顺序：红线正则 -> 参数/子命令级高风险 -> 关键路径上的变更 -> 变更类二进制 -> 只读白名单 -> 默认 REVIEW。
+ * 注：shell 元字符检测已移至 PromptInjectionDetector（用户输入层），
+ * 不在生成命令层重复拦截——真实 LLM 生成的正常命令常含管道(|)或顺序执行(;)，
+ * 此类合法用法由 blockedPatterns + criticalPaths 做精准拦截。
  */
 @Component
 public class IntentRiskGuard {
@@ -30,15 +33,7 @@ public class IntentRiskGuard {
         }
         String cmd = command.trim();
 
-        // 1. shell 元字符：防止命令拼接/重定向/注入
-        for (String mc : rules.getBlockedMetacharacters()) {
-            if (cmd.contains(mc)) {
-                return new RiskDecision(cmd, RiskLevel.BLOCK,
-                        "包含禁止的 shell 元字符 '" + mc + "'，可能用于命令拼接或注入", "metacharacter");
-            }
-        }
-
-        // 2. 红线正则
+        // 1. 红线正则（含 shell 元字符相关的危险模式，如覆写 /etc/passwd 等）
         for (int i = 0; i < blockedPatterns.size(); i++) {
             if (blockedPatterns.get(i).matcher(cmd).find()) {
                 return new RiskDecision(cmd, RiskLevel.BLOCK, blockedReasons.get(i), "blockedPattern");
@@ -56,25 +51,25 @@ public class IntentRiskGuard {
         }
         boolean mutating = rules.getReviewBinaries().contains(binary);
 
-        // 3. 关键路径上的变更类操作 -> 升级为 BLOCK
+        // 2. 关键路径上的变更类操作 -> 升级为 BLOCK
         if (mutating && touchesCriticalPath(argv)) {
             return new RiskDecision(cmd, RiskLevel.BLOCK,
                     "在系统关键路径/数据库数据目录上执行变更操作（" + binary + "），可能导致系统或数据不可恢复",
                     "criticalPath");
         }
 
-        // 4. 变更类二进制 -> REVIEW
+        // 3. 变更类二进制 -> REVIEW
         if (mutating) {
             return new RiskDecision(cmd, RiskLevel.REVIEW,
                     "变更类操作（" + binary + "）需人工二次确认", "reviewBinary");
         }
 
-        // 5. 只读白名单 -> SAFE
+        // 4. 只读白名单 -> SAFE
         if (rules.getReadOnlyBinaries().contains(binary)) {
             return new RiskDecision(cmd, RiskLevel.SAFE, "只读/感知类指令", "readOnly");
         }
 
-        // 6. 未知二进制 -> 默认 REVIEW（最小信任原则）
+        // 5. 未知二进制 -> 默认 REVIEW（最小信任原则）
         return new RiskDecision(cmd, RiskLevel.REVIEW,
                 "未在白名单内的指令（" + binary + "），默认需人工确认", "unknown");
     }

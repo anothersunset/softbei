@@ -21,3 +21,10 @@ ops-trace*.jsonl
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets
+.env
+*.env
+
+# Test artifacts (red-team reports contain raw LLM outputs)
+docs/redteam-real-llm-report-*.json
