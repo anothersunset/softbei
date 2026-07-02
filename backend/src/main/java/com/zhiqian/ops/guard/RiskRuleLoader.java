@@ -13,7 +13,7 @@ import java.io.InputStream;
 
 /**
  * 启动时从 classpath:risk-rules.yaml 加载安全规则库。
- * 规则库与代码解耦，便于热配置和评审。
+ * 规则库与代码解耦；当前为配置化、重启生效，不宣称运行时热更新。
  */
 @Component
 public class RiskRuleLoader {

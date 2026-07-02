@@ -11,6 +11,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -69,14 +70,16 @@ public class LeastPrivilegeExecutor {
             pb.directory(new File(props.getWorkingDir()));
             pb.redirectErrorStream(false);
             Process p = pb.start();
+            CompletableFuture<String> stdout = CompletableFuture.supplyAsync(() -> readStream(p.getInputStream()));
+            CompletableFuture<String> stderr = CompletableFuture.supplyAsync(() -> readStream(p.getErrorStream()));
             boolean finished = p.waitFor(props.getTimeoutSeconds(), TimeUnit.SECONDS);
             if (!finished) {
                 p.destroyForcibly();
+                stdout.cancel(true);
+                stderr.cancel(true);
                 result = new ExecResult(-1, "", "执行超时（>" + props.getTimeoutSeconds() + "s）", false, System.currentTimeMillis() - start);
             } else {
-                String out = readStream(p.getInputStream());
-                String err = readStream(p.getErrorStream());
-                result = new ExecResult(p.exitValue(), out, err, false, System.currentTimeMillis() - start);
+                result = new ExecResult(p.exitValue(), stdout.join(), stderr.join(), false, System.currentTimeMillis() - start);
             }
         } catch (Exception e) {
             result = new ExecResult(-1, "", "执行异常：" + e.getMessage(), false, System.currentTimeMillis() - start);
@@ -96,10 +99,8 @@ public class LeastPrivilegeExecutor {
         StringBuilder sb = new StringBuilder();
         try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
             String line;
-            int lines = 0;
-            while ((line = br.readLine()) != null && lines < 500) {
+            while ((line = br.readLine()) != null) {
                 sb.append(line).append('\n');
-                lines++;
             }
         } catch (Exception e) {
             sb.append("[读取输出失败: ").append(e.getMessage()).append("]");

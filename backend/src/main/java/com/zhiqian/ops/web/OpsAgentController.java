@@ -15,6 +15,7 @@ import com.zhiqian.ops.llm.LlmClient;
 import com.zhiqian.ops.pipeline.ChatRequest;
 import com.zhiqian.ops.pipeline.ChatResponse;
 import com.zhiqian.ops.pipeline.OpsPipeline;
+import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,19 +40,24 @@ public class OpsAgentController {
     private final LeastPrivilegeExecutor executor;
     private final LlmClient llm;
     private final ExecProperties execProperties;
+    private final ApiSecurityProperties apiSecurityProperties;
+    private final Environment environment;
     private final SecurityScorer securityScorer = new SecurityScorer();
     private final CounterfactualAnalyzer counterfactual = new CounterfactualAnalyzer();
     private final RollbackAdvisor rollbackAdvisor = new RollbackAdvisor();
 
     public OpsAgentController(OpsPipeline pipeline, List<AgentTool> tools,
                               RollbackLedger rollbackLedger, LeastPrivilegeExecutor executor,
-                              LlmClient llm, ExecProperties execProperties) {
+                              LlmClient llm, ExecProperties execProperties,
+                              ApiSecurityProperties apiSecurityProperties, Environment environment) {
         this.pipeline = pipeline;
         this.tools = tools;
         this.rollbackLedger = rollbackLedger;
         this.executor = executor;
         this.llm = llm;
         this.execProperties = execProperties;
+        this.apiSecurityProperties = apiSecurityProperties;
+        this.environment = environment;
     }
 
     @PostMapping("/chat")
@@ -108,6 +114,8 @@ public class OpsAgentController {
         out.put("maxStepsPerRequest", execProperties == null ? null : execProperties.getMaxStepsPerRequest());
         out.put("guardMode", "rules+normalization+human-review");
         out.put("semanticBoundary", "LLM proposes; deterministic guards decide execution");
+        out.put("apiTokenRequired", apiSecurityProperties != null && apiSecurityProperties.tokenEnabled());
+        out.put("bindAddress", environment == null ? "unknown" : environment.getProperty("server.address", "0.0.0.0"));
         return Result.ok(out);
     }
 

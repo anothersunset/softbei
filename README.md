@@ -128,6 +128,7 @@
 | MCP 协议合规验证报告（MCP-01~08） | `docs/MCP协议合规验证报告.md` |
 | 云服务器部署验收测试报告（19/19） | `docs/云服务器部署验收测试报告.md` |
 | Grafana 可观测看板（6 面板） | `deploy/grafana/opsguard-dashboard.json` |
+| auditd 关键路径取证参考规则 | `deploy/auditd-rules.conf` |
 | CI 工程化（语料回放 + 覆盖率门禁） | `.github/workflows/ci.yml` |
 | 一键验收脚本 | `verify.sh` |
 
@@ -161,7 +162,7 @@ softbei/
 │       │   └── web/         # REST 控制器 + SSE 实时思维链
 │       └── resources/
 │           ├── application.yml
-│           ├── risk-rules.yaml     # 安全规则库（可热配置）
+│           ├── risk-rules.yaml     # 安全规则库（配置化，重启生效）
 │           └── static/index.html   # B/S 控制台
 ├── deploy/                  # LoongArch + 麒麟 V11 部署
 ├── docs/                    # 初赛提交文档 + 增强阶段设计/验收报告
@@ -175,8 +176,19 @@ softbei/
 ```bash
 cd backend
 mvn spring-boot:run          # 默认 MockLlmClient，离线即可演示
-# 浏览器打开 http://localhost:8080
+# 浏览器打开 http://127.0.0.1:8080
 ```
+
+### 部署信任边界
+
+默认配置仅绑定 `127.0.0.1`，适合本机答辩演示；如果要在内网或公网开放访问，必须显式设置绑定地址并启用入口令牌：
+
+```bash
+export OPS_BIND_ADDRESS=0.0.0.0
+export OPS_API_TOKEN=<强随机令牌>
+```
+
+启用后，REST `/api/ops/**` 与 HTTP MCP `/mcp/**` 均需携带 `X-Ops-Token: <令牌>` 或 `Authorization: Bearer <令牌>`。公网可达场景未配置令牌时不建议上线。
 
 接入真实大模型（DeepSeek）：
 
