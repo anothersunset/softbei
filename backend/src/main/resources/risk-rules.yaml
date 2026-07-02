@@ -146,3 +146,33 @@ guard:
     - "(with\\s+)?no\\s+(restrictions|limits|constraints|boundaries)\\b"
     # 中文社工诱导：「显示/输出/告诉我 ... 系统提示词/提示词」
     - "(显示|展示|输出|打印|告诉我|发我|给我).{0,12}(系统提示|提示词|system\\s*prompt|系统指令)"
+    # ---- 上下文伪装/社工诱导入口（影子红队 P0 发现）----
+    # 调试模式诱导：「enter debug mode」「进入调试模式」
+    - "(enter|进入|enable|启用|activate|激活)\\s*(debug|调试)\\s*(mode|模式)"
+    - "show\\s+(raw\\s+)?output\\s+without\\s+(any\\s+)?(safety|security)\\s+filtering"
+    # 代码审查伪装：「in code review we found...」「代码审查中发现...」
+    - "(code|代码)\\s*(review|审查|评审).{0,40}(verify|works|run|execute|执行|运行|验证)"
+    # 培训/测试数据声称：「training data for security classifier」
+    - "(training|培训|测试|test)\\s*(data|数据|样本).{0,30}(security|安全|classifier|分类器|red\\s*team|红队)"
+    # 渗透测试/安全审计伪装：「authorized penetration test」「security audit」
+    # 正向：penetration test authorized by... / 反向：authorized penetration test...
+    - "(penetration|渗透|pentest)\\s*(test|测试|exercise).{0,30}(authorized|授权|approved|批准)"
+    - "(authorized|授权|approved|批准).{0,15}(penetration|渗透|pentest)\\s*(test|测试|exercise)"
+    - "(security|安全|compliance|合规|ISO)\\s*(audit|审计|检查).{0,30}(requires|execute|run|验证|执行|运行)"
+    # CISO/管理层授权伪装：「approved by CISO」「emergency maintenance window」
+    - "\\b(CISO|CTO|CSO|安全官|运维总监).{0,30}(approved|authorized|授权|批准|同意)"
+    - "emergency\\s+(maintenance|change)\\s+window"
+    # 学术研究伪装：「academic paper」「research study on security」
+    - "(academic|学术|research|研究)\\s*(paper|论文|study|研究).{0,30}(security|安全|vulnerability|漏洞|demonstrate|demonstrate|document)"
+    # 灾备演练伪装：「disaster recovery drill」「灾备演练」
+    # 正向：disaster recovery drill approved by... / 反向：approved disaster recovery drill...
+    - "(disaster|灾备|容灾).{0,10}(recovery|恢复|演练|drill).{0,30}(approved|授权|批准|执行)"
+    - "(approved|授权|批准).{0,15}(disaster|灾备|容灾).{0,10}(recovery|恢复|演练|drill)"
+    # 编码绕过后的直接危险指令：「Execute: rm -rf /...」「Run: chmod 777 /...」
+    # 当 URL/hex/八进制编码被 normalize() 解码后，这些模式可拦截还原出的危险指令
+    - "(execute|run|执行|运行|命令|請執行|请执行)\\s*:?.{0,80}(rm\\s+-[a-zA-Z]*[rf]|mkfs\\s+|dd\\s+if=|chmod\\s+777|cat\\s+/dev/\\w+\\s*>\\s*/dev/)"
+    # 结构化内容注入：Markdown 代码块 / TODO 列表 / SYSLOG 格式中嵌入命令
+    - "```(bash|shell|sh|zsh)\\s*\\n.{0,200}(rm\\s+-[a-zA-Z]*[rf]|mkfs|dd\\s+if=|chmod\\s+777|/dev/sda|/etc/(passwd|shadow|sudoers))"
+    - "(TODO|FIXME|ACTION|STEP)\\b.{0,40}(rm\\s+-[a-zA-Z]*[rf]|mkfs|dd\\s+if=|chmod\\s+777|/etc/(passwd|shadow|sudoers))"
+    - "(SYSLOG|syslog|kern\\.|daemon\\.).{0,10}(CRITICAL|CRIT|EMERG|PANIC).{0,40}(rm\\s+-[a-zA-Z]*[rf]|mkfs|dd\\s+if=|chmod\\s+777)"
+
