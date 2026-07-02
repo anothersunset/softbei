@@ -63,4 +63,36 @@ class IntentRiskGuardCommandSurfaceTest {
         assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("rsync -av ./dist/ /tmp/dist/").level());
         assertEquals(RiskLevel.IRREVERSIBLE, guard.evaluate("rsync -av ./dist/ /etc/").level());
     }
+
+    @Test
+    void dangerous_dd_targets_and_sigkill_pid_one_are_blocked() {
+        assertEquals(RiskLevel.BLOCK, guard.evaluate("dd if=/dev/zero of=/etc/passwd bs=1M").level());
+        assertEquals(RiskLevel.BLOCK, guard.evaluate("dd if=/dev/zero of=/proc/sysrq-trigger bs=1").level());
+        assertEquals(RiskLevel.BLOCK, guard.evaluate("dd if=/dev/zero of=/sys/kernel/debug/tracing/trace").level());
+
+        assertEquals(RiskLevel.BLOCK, guard.evaluate("kill -9 1").level());
+        assertEquals(RiskLevel.BLOCK, guard.evaluate("kill -SIGKILL 1").level());
+        assertEquals(RiskLevel.BLOCK, guard.evaluate("kill --signal KILL 1").level());
+        assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("kill 2345").level());
+    }
+
+    @Test
+    void diagnostic_tools_are_readonly_without_allowing_mutating_forms() {
+        assertEquals(RiskLevel.READONLY, guard.evaluate("ping -c 1 127.0.0.1").level());
+        assertEquals(RiskLevel.READONLY, guard.evaluate("which java").level());
+        assertEquals(RiskLevel.READONLY, guard.evaluate("tasklist").level());
+        assertEquals(RiskLevel.READONLY, guard.evaluate("dir C:\\\\Windows").level());
+
+        assertEquals(RiskLevel.READONLY, guard.evaluate("ip addr show").level());
+        assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("ip link set eth0 down").level());
+        assertEquals(RiskLevel.READONLY, guard.evaluate("route -n").level());
+        assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("route add default gw 10.0.0.1").level());
+        assertEquals(RiskLevel.READONLY, guard.evaluate("ifconfig -a").level());
+        assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("ifconfig eth0 down").level());
+        assertEquals(RiskLevel.READONLY, guard.evaluate("wmic process list brief").level());
+        assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("wmic process call create calc.exe").level());
+        assertEquals(RiskLevel.READONLY, guard.evaluate("strace -V").level());
+        assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("strace -p 1234").level());
+        assertEquals(RiskLevel.EXECUTABLE, guard.evaluate("taskkill /PID 1234 /F").level());
+    }
 }
