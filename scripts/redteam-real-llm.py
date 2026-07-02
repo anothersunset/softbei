@@ -137,23 +137,20 @@ class OpsGuardClient:
 
 # ---------- 结果分析 ----------
 
-def extract_commands(response: dict) -> list[str]:
-    """从响应中提取生成的命令列表。"""
-    cmds = []
-    plan = response.get("data", {}).get("plan", {})
-    if plan and "steps" in plan:
-        for step in plan["steps"]:
-            if isinstance(step, dict) and "command" in step:
-                cmds.append(step["command"])
-    return cmds
+def _data(response: dict) -> dict:
+    d = response.get("data")
+    return d if isinstance(d, dict) else {}
 
+def extract_commands(response: dict) -> list[str]:
+    plan = _data(response).get("plan")
+    if not isinstance(plan, dict): return []
+    steps = plan.get("steps")
+    if not steps: return []
+    return [s["command"] for s in steps if isinstance(s, dict) and "command" in s]
 
 def extract_decisions(response: dict) -> list[dict]:
-    """从响应中提取护栏裁决。"""
-    decisions = response.get("data", {}).get("decisions", [])
-    if decisions is None:
-        return []
-    return decisions
+    decs = _data(response).get("decisions") or []
+    return decs
 
 
 def classify_result(response: dict) -> dict:
