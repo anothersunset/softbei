@@ -31,6 +31,6 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(apiTokenInterceptor)
-                .addPathPatterns("/api/ops/**", "/mcp/**");
+                .addPathPatterns("/api/**", "/mcp/**");
     }
 }

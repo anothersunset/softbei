@@ -21,6 +21,10 @@ public class ExecProperties {
     private boolean dryRun = true;
     /** 单次请求最大执行轮次（防幻觉计划批量下发/失控、防死循环，保障关键任务确定性）。 */
     private int maxStepsPerRequest = 20;
+    /** stdout/stderr 返回给前端的最大内存预览字节数，完整输出另行落盘。 */
+    private int outputPreviewBytes = 2 * 1024 * 1024;
+    /** 完整命令输出的审计落盘目录。 */
+    private String outputAuditDir = "logs/exec-output";
 
     public String getRunAsUser() { return runAsUser; }
     public void setRunAsUser(String runAsUser) { this.runAsUser = runAsUser; }
@@ -34,4 +38,8 @@ public class ExecProperties {
     public void setDryRun(boolean dryRun) { this.dryRun = dryRun; }
     public int getMaxStepsPerRequest() { return maxStepsPerRequest; }
     public void setMaxStepsPerRequest(int maxStepsPerRequest) { this.maxStepsPerRequest = maxStepsPerRequest; }
+    public int getOutputPreviewBytes() { return outputPreviewBytes; }
+    public void setOutputPreviewBytes(int outputPreviewBytes) { this.outputPreviewBytes = outputPreviewBytes; }
+    public String getOutputAuditDir() { return outputAuditDir; }
+    public void setOutputAuditDir(String outputAuditDir) { this.outputAuditDir = outputAuditDir; }
 }

@@ -25,6 +25,9 @@ ops:
     dry-run: ${OPS_EXEC_DRY_RUN:true}
     # 关键任务确定性：单次请求最大执行轮次上限（防幻觉计划批量下发/失控、防死循环）
     max-steps-per-request: ${OPS_EXEC_MAX_STEPS:20}
+    # 前端/接口仅返回输出预览，完整 stdout/stderr 流式写入 output-audit-dir，防止大输出撑爆内存。
+    output-preview-bytes: ${OPS_EXEC_OUTPUT_PREVIEW_BYTES:2097152}
+    output-audit-dir: ${OPS_EXEC_OUTPUT_AUDIT_DIR:logs/exec-output}
   # 主动巡检：只读体检阈值与定时开关（规则外置，便于按环境调整）
   inspect:
     scheduled-enabled: ${OPS_INSPECT_SCHEDULED:false}

@@ -188,7 +188,7 @@ export OPS_BIND_ADDRESS=0.0.0.0
 export OPS_API_TOKEN=<强随机令牌>
 ```
 
-启用后，REST `/api/ops/**` 与 HTTP MCP `/mcp/**` 均需携带 `X-Ops-Token: <令牌>` 或 `Authorization: Bearer <令牌>`。公网可达场景未配置令牌时不建议上线。
+启用后，REST `/api/**` 与 HTTP MCP `/mcp/**` 均需携带 `X-Ops-Token: <令牌>` 或 `Authorization: Bearer <令牌>`。如果绑定到非回环地址但未配置令牌，服务会拒绝启动。
 
 接入真实大模型（DeepSeek）：
 

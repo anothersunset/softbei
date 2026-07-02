@@ -1,4 +1,7 @@
 # 测试专用配置：强制 mock 推理 + dry-run，保证评测确定性与可复现
+server:
+  address: 127.0.0.1
+
 ops:
   llm:
     provider: mock

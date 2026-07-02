@@ -4,13 +4,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -70,8 +73,11 @@ public class LeastPrivilegeExecutor {
             pb.directory(new File(props.getWorkingDir()));
             pb.redirectErrorStream(false);
             Process p = pb.start();
-            CompletableFuture<String> stdout = CompletableFuture.supplyAsync(() -> readStream(p.getInputStream()));
-            CompletableFuture<String> stderr = CompletableFuture.supplyAsync(() -> readStream(p.getErrorStream()));
+            String execId = UUID.randomUUID().toString();
+            CompletableFuture<String> stdout = CompletableFuture.supplyAsync(
+                    () -> drainStream(p.getInputStream(), execId, "stdout"));
+            CompletableFuture<String> stderr = CompletableFuture.supplyAsync(
+                    () -> drainStream(p.getErrorStream(), execId, "stderr"));
             boolean finished = p.waitFor(props.getTimeoutSeconds(), TimeUnit.SECONDS);
             if (!finished) {
                 p.destroyForcibly();
@@ -95,16 +101,50 @@ public class LeastPrivilegeExecutor {
         return result;
     }
 
-    private String readStream(InputStream in) {
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line).append('\n');
+    private String drainStream(InputStream in, String execId, String streamName) {
+        int previewLimit = Math.max(1024, props.getOutputPreviewBytes());
+        Path auditPath = PathsSafe.outputPath(props.getOutputAuditDir(), execId, streamName);
+        ByteArrayOutputStream preview = new ByteArrayOutputStream(Math.min(previewLimit, 8192));
+        long total = 0;
+        boolean truncated = false;
+        try {
+            Files.createDirectories(auditPath.getParent());
+            try (InputStream source = in;
+                 OutputStream audit = Files.newOutputStream(auditPath)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = source.read(buf)) != -1) {
+                    audit.write(buf, 0, n);
+                    total += n;
+                    int remaining = previewLimit - preview.size();
+                    if (remaining > 0) {
+                        preview.write(buf, 0, Math.min(remaining, n));
+                    }
+                    if (preview.size() >= previewLimit && total > previewLimit) {
+                        truncated = true;
+                    }
+                }
             }
         } catch (Exception e) {
-            sb.append("[读取输出失败: ").append(e.getMessage()).append("]");
+            return "[读取输出失败: " + e.getMessage() + "]";
         }
-        return sb.toString();
+        String out = preview.toString(StandardCharsets.UTF_8);
+        if (truncated) {
+            out += "\n[output-truncated] 前端仅展示前 " + previewLimit
+                    + " bytes；完整 " + total + " bytes 已落盘: " + auditPath;
+        } else {
+            out += "\n[output-audit] 完整 " + total + " bytes 已落盘: " + auditPath;
+        }
+        return out;
+    }
+
+    private static final class PathsSafe {
+        private static Path outputPath(String dir, String execId, String streamName) {
+            String safeStream = streamName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String safeId = execId.replaceAll("[^a-zA-Z0-9._-]", "_");
+            return Path.of(dir == null || dir.isBlank() ? "logs/exec-output" : dir)
+                    .resolve(safeId + "-" + safeStream + ".log")
+                    .normalize();
+        }
     }
 }
