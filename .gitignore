@@ -28,3 +28,4 @@ Thumbs.db
 
 # Test artifacts (red-team reports contain raw LLM outputs)
 docs/redteam-real-llm-report-*.json
+docs/redteam-stability-report-*.json
