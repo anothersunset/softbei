@@ -17,7 +17,8 @@ class IntentRiskGuardCommandSurfaceTest {
     @Test
     void find_delete_and_exec_are_blocked_but_plain_find_stays_safe() {
         assertEquals(RiskLevel.BLOCK, guard.evaluate("find /data -type f -delete").level());
-        assertEquals(RiskLevel.BLOCK, guard.evaluate("find /tmp -name '*.log' -exec rm {}").level());
+        // -exec rm: rm 在 reviewBinaries 中，升级为 REVIEW（非 BLOCK，因与 standalone rm 一致）
+        assertEquals(RiskLevel.REVIEW, guard.evaluate("find /tmp -name '*.log' -exec rm {}").level());
         assertEquals(RiskLevel.BLOCK, guard.evaluate("find /tmp -name '*.log' -fprint /tmp/out.txt").level());
 
         RiskDecision safe = guard.evaluate("find /var/log -name '*.log'");

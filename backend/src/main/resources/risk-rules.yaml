@@ -78,6 +78,7 @@ guard:
     - useradd
     - userdel
     - passwd
+    - taskkill
 
   # 只读/感知类白名单：安全（SAFE）
   readOnlyBinaries:

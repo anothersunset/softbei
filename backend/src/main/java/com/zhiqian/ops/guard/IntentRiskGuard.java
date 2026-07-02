@@ -107,16 +107,84 @@ public class IntentRiskGuard {
     }
 
     private RiskDecision evaluateFind(String cmd, List<String> argv) {
-        for (String arg : argv) {
-            if ("-delete".equals(arg) || "-exec".equals(arg) || "-execdir".equals(arg)
-                    || "-ok".equals(arg) || "-okdir".equals(arg)
-                    || arg.startsWith("-fprint") || "-fls".equals(arg)) {
+        RiskDecision worst = null;
+        for (int i = 0; i < argv.size(); i++) {
+            String arg = argv.get(i);
+            // -delete 无条件拦截
+            if ("-delete".equals(arg)) {
                 return new RiskDecision(cmd, RiskLevel.BLOCK,
-                        "find 参数包含删除、执行或写文件动作（" + arg + "），只读白名单不得放行",
-                        "findMutatingAction");
+                        "find -delete 会删除匹配文件，不可逆", "findDelete");
+            }
+            // -fprint/-fls 写文件 → BLOCK
+            if (arg.startsWith("-fprint") || "-fls".equals(arg)) {
+                return new RiskDecision(cmd, RiskLevel.BLOCK,
+                        "find " + arg + " 会写文件到磁盘", "findWriteFile");
+            }
+            // -ok/-okdir 交互式确认 → REVIEW
+            if ("-ok".equals(arg) || "-okdir".equals(arg)) {
+                worst = worst(worst, new RiskDecision(cmd, RiskLevel.REVIEW,
+                        "find " + arg + " 需交互确认执行，请人工审核", "findInteractive"));
+                continue;
+            }
+            // -exec/-execdir：检查被执行的二进制
+            if ("-exec".equals(arg) || "-execdir".equals(arg)) {
+                String execBin = findExecBinary(argv, i + 1);
+                if (execBin == null) {
+                    // 无法解析被执行的命令 → 保守 BLOCK
+                    return new RiskDecision(cmd, RiskLevel.BLOCK,
+                            "find " + arg + " 无法确定执行的命令，保守拦截", "findExecUnknown");
+                }
+                if (rules.getReadOnlyBinaries().contains(execBin)) {
+                    // 只读二进制 → 允许（继续检查后续 -exec）
+                    continue;
+                }
+                if (rules.getReviewBinaries().contains(execBin)) {
+                    // 变更类二进制在 -exec 中批量应用，升级为 REVIEW
+                    worst = worst(worst, new RiskDecision(cmd, RiskLevel.REVIEW,
+                            "find " + arg + " " + execBin + " 批量执行变更操作，需人工确认", "findExecMutating"));
+                    continue;
+                }
+                // 未知二进制 → 保守 BLOCK
+                return new RiskDecision(cmd, RiskLevel.BLOCK,
+                        "find " + arg + " 执行非白名单命令（" + execBin + "），保守拦截", "findExecBlocked");
             }
         }
+        return worst;
+    }
+
+    /** 从 -exec/-execdir 后续 token 中提取被执行的二进制名（跳过 {}, options 等）。 */
+    private String findExecBinary(List<String> argv, int start) {
+        for (int i = start; i < argv.size(); i++) {
+            String arg = argv.get(i);
+            // \; 或 ; 或 + 终结 exec 语句
+            if ("\\;".equals(arg) || ";".equals(arg) || "+".equals(arg)) {
+                return null;
+            }
+            // {} 是占位符，跳过
+            if ("{}".equals(arg)) {
+                continue;
+            }
+            // 跳过选项（以 - 开头）
+            if (arg.startsWith("-")) {
+                continue;
+            }
+            // 找到第一个非选项 token → 这就是被执行命令
+            return basename(arg);
+        }
         return null;
+    }
+
+    /** 返回更严重（BLOCK > REVIEW > SAFE）的裁决。 */
+    private RiskDecision worst(RiskDecision a, RiskDecision b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        if (a.level() == RiskLevel.BLOCK || b.level() == RiskLevel.BLOCK) {
+            return a.level() == RiskLevel.BLOCK ? a : b;
+        }
+        if (a.level() == RiskLevel.REVIEW || b.level() == RiskLevel.REVIEW) {
+            return a.level() == RiskLevel.REVIEW ? a : b;
+        }
+        return a;
     }
 
     private RiskDecision evaluateDocker(String cmd, List<String> argv) {
