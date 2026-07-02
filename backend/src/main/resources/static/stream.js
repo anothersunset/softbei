@@ -1,16 +1,17 @@
 /*
  * 实时思维链（Live Chain-of-Thought）客户端
- * 通过 EventSource 订阅 GET /api/ops/chat/stream，实时渲染安全护栏八阶段的逐步执行（类 ChatGPT tool_call 展示）。
+ * 通过 EventSource 订阅 GET /api/ops/chat/stream，实时渲染安全护栏九阶段的逐步执行（类 ChatGPT tool_call 展示）。
  * 不依赖也不修改 app.js；所需样式与阶段进度条 DOM 均由本文件动态注入，不依赖 index.html 的结构调整。
  */
 (function () {
-  var STAGE_ORDER = ['RECEIVE', 'INJECTION_GUARD', 'SENSE', 'RETRIEVE', 'REASON', 'GUARD', 'EXECUTE', 'ANALYZE'];
+  var STAGE_ORDER = ['RECEIVE', 'INJECTION_GUARD', 'SENSE', 'RETRIEVE', 'REASON', 'PLAN', 'GUARD', 'EXECUTE', 'ANALYZE'];
   var STAGE_LABEL = {
     RECEIVE: '接收指令',
     INJECTION_GUARD: '抗提示词注入',
     SENSE: '环境感知',
     RETRIEVE: '知识检索',
     REASON: '推理决策',
+    PLAN: '任务规划',
     GUARD: '安全校验',
     EXECUTE: '最小权限执行',
     ANALYZE: '根因分析'
@@ -102,7 +103,7 @@
     }
   }
 
-  /** 渲染八阶段实时进度条：已完成点亮为绿色，被拦截阶段标红，下一阶段为 active。 */
+  /** 渲染九阶段实时进度条：已完成点亮为绿色，被拦截阶段标红，下一阶段为 active。 */
   function renderPipe() {
     var pipe = $('streamPipe');
     if (!pipe) return;
@@ -137,6 +138,7 @@
       if (stage === 'RETRIEVE') return '检索依据 ' + (output.count != null ? output.count : 0) + ' 条' + (output.degraded ? '（降级）' : '（双语同义召回）');
       if (stage === 'INJECTION_GUARD') return output.blocked ? '命中注入特征，已拦截' : '未检出注入';
       if (stage === 'REASON') return (output.summary ? esc(output.summary) : '生成计划') + '（步骤 ' + ((output.steps && output.steps.length) || 0) + '）';
+      if (stage === 'PLAN') return '任务拆解 ' + ((output.tasks && output.tasks.length) || 0) + ' 项（' + esc(output.executionMode || 'sequential') + '）';
       if (stage === 'GUARD') return '裁决 ' + ((output.decisions && output.decisions.length) || 0) + ' 条，最高风险 ' + esc(output.worstLevel);
       if (stage === 'EXECUTE') return '执行 ' + (output.executedCount != null ? output.executedCount : 0) + ' 条指令';
       if (stage === 'ANALYZE') return output.analysis ? esc(String(output.analysis).slice(0, 80)) : '输出根因分析';

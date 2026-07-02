@@ -107,7 +107,7 @@ public class InspectionService {
         String sev = worstPct >= props.getDiskCriticalPercent() ? "CRITICAL"
                 : worstPct >= props.getDiskWarnPercent() ? "WARN" : "OK";
         String sug = "OK".equals(sev) ? "磁盘容量充足，无需处理"
-                : "清理 " + worstMount + " 上的大文件/旧日志(如 /var/log)，必要时扩容；建议走主链路指令并经 REVIEW 确认";
+                : "清理 " + worstMount + " 上的大文件/旧日志(如 /var/log)，必要时扩容；建议走主链路指令并经 EXECUTABLE/IRREVERSIBLE 确认";
         return new InspectionFinding("disk-usage", "disk", sev,
                 "磁盘使用率(最高分区 " + worstMount + ")", "使用率",
                 worstPct + "%", ">=" + props.getDiskWarnPercent() + "% 告警 / >=" + props.getDiskCriticalPercent() + "% 严重",

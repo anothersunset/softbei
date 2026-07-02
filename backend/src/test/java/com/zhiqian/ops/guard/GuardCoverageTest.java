@@ -30,7 +30,7 @@ class GuardCoverageTest {
         @Test
         void analyze_safe_decisions_filtered_out() {
             var decisions = List.of(
-                new RiskDecision("df -h", RiskLevel.SAFE, "read-only", "safeList")
+                new RiskDecision("df -h", RiskLevel.READONLY, "read-only", "safeList")
             );
             assertTrue(analyzer.analyze(decisions).isEmpty());
         }
@@ -89,7 +89,7 @@ class GuardCoverageTest {
         @Test
         void analyze_chmod_r_high() {
             var decisions = List.of(
-                new RiskDecision("chmod -R 777 /etc", RiskLevel.REVIEW, "chmod", "changePattern")
+                new RiskDecision("chmod -R 777 /etc", RiskLevel.EXECUTABLE, "chmod", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals("HIGH", result.get(0).irreversibility());
@@ -99,7 +99,7 @@ class GuardCoverageTest {
         @Test
         void analyze_chown_r_high() {
             var decisions = List.of(
-                new RiskDecision("chown -R root:root /app", RiskLevel.REVIEW, "chown", "changePattern")
+                new RiskDecision("chown -R root:root /app", RiskLevel.EXECUTABLE, "chown", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals("HIGH", result.get(0).irreversibility());
@@ -108,7 +108,7 @@ class GuardCoverageTest {
         @Test
         void analyze_systemctl_stop_medium() {
             var decisions = List.of(
-                new RiskDecision("systemctl stop nginx", RiskLevel.REVIEW, "stop", "changePattern")
+                new RiskDecision("systemctl stop nginx", RiskLevel.EXECUTABLE, "stop", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals("MEDIUM", result.get(0).irreversibility());
@@ -156,7 +156,7 @@ class GuardCoverageTest {
         @Test
         void analyze_apt_install_medium() {
             var decisions = List.of(
-                new RiskDecision("apt install nginx", RiskLevel.REVIEW, "install", "changePattern")
+                new RiskDecision("apt install nginx", RiskLevel.EXECUTABLE, "install", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals("MEDIUM", result.get(0).irreversibility());
@@ -166,7 +166,7 @@ class GuardCoverageTest {
         @Test
         void analyze_redirect_medium() {
             var decisions = List.of(
-                new RiskDecision("echo test > /etc/config", RiskLevel.REVIEW, "redirect", "changePattern")
+                new RiskDecision("echo test > /etc/config", RiskLevel.EXECUTABLE, "redirect", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals("MEDIUM", result.get(0).irreversibility());
@@ -176,7 +176,7 @@ class GuardCoverageTest {
         @Test
         void analyze_unknown_low() {
             var decisions = List.of(
-                new RiskDecision("some_unknown_cmd", RiskLevel.REVIEW, "unknown", "changePattern")
+                new RiskDecision("some_unknown_cmd", RiskLevel.EXECUTABLE, "unknown", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals("LOW", result.get(0).irreversibility());
@@ -185,7 +185,7 @@ class GuardCoverageTest {
         @Test
         void analyze_unknown_with_path_low() {
             var decisions = List.of(
-                new RiskDecision("some_cmd /var/data", RiskLevel.REVIEW, "unknown", "changePattern")
+                new RiskDecision("some_cmd /var/data", RiskLevel.EXECUTABLE, "unknown", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals("LOW", result.get(0).irreversibility());
@@ -205,9 +205,9 @@ class GuardCoverageTest {
         @Test
         void analyze_multiple_decisions() {
             var decisions = List.of(
-                new RiskDecision("df -h", RiskLevel.SAFE, "read-only", "safeList"),
+                new RiskDecision("df -h", RiskLevel.READONLY, "read-only", "safeList"),
                 new RiskDecision("rm -rf /tmp", RiskLevel.BLOCK, "rm", "blockedPattern"),
-                new RiskDecision("systemctl stop nginx", RiskLevel.REVIEW, "stop", "changePattern")
+                new RiskDecision("systemctl stop nginx", RiskLevel.EXECUTABLE, "stop", "changePattern")
             );
             var result = analyzer.analyze(decisions);
             assertEquals(2, result.size()); // SAFE filtered out
@@ -224,7 +224,7 @@ class GuardCoverageTest {
 
         @Test
         void score_injection_blocked_full_static() {
-            var result = scorer.score(true, RiskLevel.SAFE, null, null, "INJECTION_BLOCKED");
+            var result = scorer.score(true, RiskLevel.READONLY, null, null, "INJECTION_BLOCKED");
             assertEquals(30, result.staticRisk());
             assertEquals(35, result.dynamicAudit());
             assertEquals(35, result.restrictedExec());
@@ -234,7 +234,7 @@ class GuardCoverageTest {
 
         @Test
         void score_no_decisions_no_injection_neutral() {
-            var result = scorer.score(false, RiskLevel.SAFE, null, null, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.READONLY, null, null, "EXECUTED");
             assertEquals(15, result.staticRisk());
         }
 
@@ -269,18 +269,18 @@ class GuardCoverageTest {
         @Test
         void score_safe_decisions() {
             var decisions = List.of(
-                new RiskDecision("df -h", RiskLevel.SAFE, "read-only", "safeList")
+                new RiskDecision("df -h", RiskLevel.READONLY, "read-only", "safeList")
             );
-            var result = scorer.score(false, RiskLevel.SAFE, decisions, null, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.READONLY, decisions, null, "EXECUTED");
             assertEquals(28, result.staticRisk());
         }
 
         @Test
         void score_review_decisions() {
             var decisions = List.of(
-                new RiskDecision("systemctl restart nginx", RiskLevel.REVIEW, "restart", "changePattern")
+                new RiskDecision("systemctl restart nginx", RiskLevel.EXECUTABLE, "restart", "changePattern")
             );
-            var result = scorer.score(false, RiskLevel.REVIEW, decisions, null, "REVIEW_PENDING");
+            var result = scorer.score(false, RiskLevel.EXECUTABLE, decisions, null, "REVIEW_PENDING");
             assertEquals(22, result.staticRisk());
             assertEquals(29, result.dynamicAudit());
         }
@@ -296,13 +296,13 @@ class GuardCoverageTest {
 
         @Test
         void score_dynamic_safe_no_injection() {
-            var result = scorer.score(false, RiskLevel.SAFE, null, null, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.READONLY, null, null, "EXECUTED");
             assertEquals(32, result.dynamicAudit());
         }
 
         @Test
         void score_exec_no_execution() {
-            var result = scorer.score(false, RiskLevel.SAFE, null, null, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.READONLY, null, null, "EXECUTED");
             assertEquals(35, result.restrictedExec());
         }
 
@@ -312,9 +312,9 @@ class GuardCoverageTest {
                 Map.<String, Object>of("executed", true, "dryRun", false, "level", "REVIEW")
             );
             var decisions = List.of(
-                new RiskDecision("cmd", RiskLevel.REVIEW, "r", "rule")
+                new RiskDecision("cmd", RiskLevel.EXECUTABLE, "r", "rule")
             );
-            var result = scorer.score(false, RiskLevel.REVIEW, decisions, execResults, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.EXECUTABLE, decisions, execResults, "EXECUTED");
             assertEquals(27, result.restrictedExec());
         }
 
@@ -324,21 +324,21 @@ class GuardCoverageTest {
                 Map.<String, Object>of("executed", true, "dryRun", true, "level", "REVIEW")
             );
             var decisions = List.of(
-                new RiskDecision("cmd", RiskLevel.REVIEW, "r", "rule")
+                new RiskDecision("cmd", RiskLevel.EXECUTABLE, "r", "rule")
             );
-            var result = scorer.score(false, RiskLevel.REVIEW, decisions, execResults, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.EXECUTABLE, decisions, execResults, "EXECUTED");
             assertEquals(33, result.restrictedExec());
         }
 
         @Test
         void score_exec_safe_level() {
             var execResults = List.of(
-                Map.<String, Object>of("executed", true, "dryRun", false, "level", "SAFE")
+                Map.<String, Object>of("executed", true, "dryRun", false, "level", "READONLY")
             );
             var decisions = List.of(
-                new RiskDecision("cmd", RiskLevel.SAFE, "r", "safeList")
+                new RiskDecision("cmd", RiskLevel.READONLY, "r", "safeList")
             );
-            var result = scorer.score(false, RiskLevel.SAFE, decisions, execResults, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.READONLY, decisions, execResults, "EXECUTED");
             assertEquals(33, result.restrictedExec());
         }
 
@@ -346,12 +346,12 @@ class GuardCoverageTest {
         void score_grade_b() {
             // REVIEW decisions + no injection + real exec = 22 + 29 + 27 = 78 → B
             var decisions = List.of(
-                new RiskDecision("cmd", RiskLevel.REVIEW, "r", "changePattern")
+                new RiskDecision("cmd", RiskLevel.EXECUTABLE, "r", "changePattern")
             );
             var execResults = List.of(
                 Map.<String, Object>of("executed", true, "dryRun", false, "level", "REVIEW")
             );
-            var result = scorer.score(false, RiskLevel.REVIEW, decisions, execResults, "EXECUTED");
+            var result = scorer.score(false, RiskLevel.EXECUTABLE, decisions, execResults, "EXECUTED");
             assertTrue(result.grade().contains("B"));
         }
 
@@ -359,7 +359,7 @@ class GuardCoverageTest {
         void score_grade_c() {
             // Mix to get C (60-74)
             var decisions = List.of(
-                new RiskDecision("cmd", RiskLevel.REVIEW, "r", "changePattern")
+                new RiskDecision("cmd", RiskLevel.EXECUTABLE, "r", "changePattern")
             );
             var execResults = List.of(
                 Map.<String, Object>of("executed", true, "dryRun", false, "level", "BLOCK")
@@ -370,7 +370,7 @@ class GuardCoverageTest {
 
         @Test
         void score_notes_populated() {
-            var result = scorer.score(true, RiskLevel.SAFE, null, null, "INJECTION_BLOCKED");
+            var result = scorer.score(true, RiskLevel.READONLY, null, null, "INJECTION_BLOCKED");
             assertFalse(result.notes().isEmpty());
             assertTrue(result.notes().size() >= 3);
         }
@@ -539,7 +539,7 @@ class GuardCoverageTest {
         @Test
         void buildLedger_safe_decisions_filtered() {
             var decisions = List.of(
-                new RiskDecision("df -h", RiskLevel.SAFE, "safe", "safeList")
+                new RiskDecision("df -h", RiskLevel.READONLY, "safe", "safeList")
             );
             var execResults = List.of(
                 Map.<String, Object>of("executed", true)
@@ -550,7 +550,7 @@ class GuardCoverageTest {
         @Test
         void buildLedger_executed_review_included() {
             var decisions = List.of(
-                new RiskDecision("systemctl stop nginx", RiskLevel.REVIEW, "stop", "changePattern")
+                new RiskDecision("systemctl stop nginx", RiskLevel.EXECUTABLE, "stop", "changePattern")
             );
             var execResults = List.of(
                 Map.<String, Object>of("executed", true)
@@ -563,7 +563,7 @@ class GuardCoverageTest {
         @Test
         void buildLedger_not_executed_filtered() {
             var decisions = List.of(
-                new RiskDecision("systemctl stop nginx", RiskLevel.REVIEW, "stop", "changePattern")
+                new RiskDecision("systemctl stop nginx", RiskLevel.EXECUTABLE, "stop", "changePattern")
             );
             var execResults = List.of(
                 Map.<String, Object>of("executed", false)
@@ -574,7 +574,7 @@ class GuardCoverageTest {
         @Test
         void buildLedger_no_exec_results_filtered() {
             var decisions = List.of(
-                new RiskDecision("systemctl stop nginx", RiskLevel.REVIEW, "stop", "changePattern")
+                new RiskDecision("systemctl stop nginx", RiskLevel.EXECUTABLE, "stop", "changePattern")
             );
             assertTrue(advisor.buildLedger(decisions, null).isEmpty());
         }
@@ -582,8 +582,8 @@ class GuardCoverageTest {
         @Test
         void buildLedger_mixed_decisions() {
             var decisions = List.of(
-                new RiskDecision("df -h", RiskLevel.SAFE, "safe", "safeList"),
-                new RiskDecision("systemctl stop nginx", RiskLevel.REVIEW, "stop", "changePattern"),
+                new RiskDecision("df -h", RiskLevel.READONLY, "safe", "safeList"),
+                new RiskDecision("systemctl stop nginx", RiskLevel.EXECUTABLE, "stop", "changePattern"),
                 new RiskDecision("rm -rf /tmp", RiskLevel.BLOCK, "rm", "blockedPattern")
             );
             var execResults = List.of(

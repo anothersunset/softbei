@@ -74,6 +74,7 @@
   .tag,.badge{font-size:10px;font-weight:800;letter-spacing:.55px;padding:3px 7px;border-radius:6px;text-transform:uppercase;border:1px solid transparent;white-space:nowrap}
   .tag.safe,.badge.safe{color:var(--safe);background:color-mix(in srgb,var(--safe) 12%,#fff);border-color:color-mix(in srgb,var(--safe) 24%,transparent)}
   .tag.review,.badge.review{color:var(--review);background:color-mix(in srgb,var(--review) 12%,#fff);border-color:color-mix(in srgb,var(--review) 24%,transparent)}
+  .tag.irreversible,.badge.irreversible{color:#8b2f44;background:color-mix(in srgb,var(--block) 9%,#fff);border-color:color-mix(in srgb,var(--block) 22%,transparent)}
   .tag.block,.badge.block{color:var(--block);background:color-mix(in srgb,var(--block) 12%,#fff);border-color:color-mix(in srgb,var(--block) 24%,transparent)}
   .badge.gray{color:var(--faint);background:var(--line-soft);border-color:var(--line)}
   .kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -222,8 +223,8 @@
         <div class="cb">
           <div class="kpi">
             <div class="k total"><div class="n" id="sTotal">0</div><div class="t">总指令</div></div>
-            <div class="k safe"><div class="n" id="sSafe">0</div><div class="t">Safe</div></div>
-            <div class="k review"><div class="n" id="sReview">0</div><div class="t">Review</div></div>
+            <div class="k safe"><div class="n" id="sSafe">0</div><div class="t">Readonly</div></div>
+            <div class="k review"><div class="n" id="sReview">0</div><div class="t">Approval</div></div>
             <div class="k block"><div class="n" id="sBlock">0</div><div class="t">Block</div></div>
           </div>
         </div>

@@ -24,7 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 实时思维链(SSE)接口：以 Server-Sent Events 逐阶段推送安全护栏八阶段的执行过程，
+ * 实时思维链(SSE)接口：以 Server-Sent Events 逐阶段推送安全护栏九阶段的执行过程，
  * 供前端像 ChatGPT 展示 tool_call 那样实时渲染 Agent 的推理与工具调用。
  *
  * 设计要点：
@@ -100,14 +100,10 @@ public class OpsStreamController {
     /** 与 OpsAgentController.enrich() 保持一致：在不改变管线裁决与 status 的前提下，补充安全评分、反事实回放与可一键回滚的动作账本（纯计算）。 */
     private void enrich(ChatResponse resp) {
         boolean injectionBlocked = "INJECTION_BLOCKED".equals(resp.getStatus());
-        RiskLevel worst = RiskLevel.SAFE;
+        RiskLevel worst = RiskLevel.READONLY;
         if (resp.getDecisions() != null) {
             for (RiskDecision d : resp.getDecisions()) {
-                if (d.level() == RiskLevel.BLOCK) {
-                    worst = RiskLevel.BLOCK;
-                } else if (d.level() == RiskLevel.REVIEW && worst != RiskLevel.BLOCK) {
-                    worst = RiskLevel.REVIEW;
-                }
+                worst = RiskLevel.max(worst, d.level());
             }
         }
         resp.setSecurityScore(securityScorer.score(

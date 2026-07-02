@@ -212,11 +212,11 @@ public class ContextRetriever {
                     "对以下关键路径的变更需格外谨慎，触碰将升级为阻断或人工确认：" + String.join("、", rules.getCriticalPaths())));
         }
         if (!rules.getReviewBinaries().isEmpty()) {
-            staticDocs.add(new Doc("rule-review", "rule", "risk-rules.yaml", "变更类命令（需人工确认 REVIEW）",
+            staticDocs.add(new Doc("rule-review", "rule", "risk-rules.yaml", "变更类命令（EXECUTABLE / IRREVERSIBLE 需人工确认）",
                     "以下命令属于变更类操作，需人工二次确认后才会以最小权限执行：" + String.join("、", rules.getReviewBinaries())));
         }
         if (!rules.getReadOnlyBinaries().isEmpty()) {
-            staticDocs.add(new Doc("rule-ro", "rule", "risk-rules.yaml", "只读安全命令（SAFE）",
+            staticDocs.add(new Doc("rule-ro", "rule", "risk-rules.yaml", "只读感知命令（READONLY）",
                     "以下只读命令可安全执行用于诊断：" + String.join("、", rules.getReadOnlyBinaries())));
         }
     }

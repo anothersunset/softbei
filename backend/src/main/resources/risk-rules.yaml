@@ -54,7 +54,23 @@ guard:
     - "/var/lib/docker"
     - "/data"
 
-  # 变更类二进制：需人工确认（REVIEW）
+  # 核心服务：变更类操作命中时升级为 IRREVERSIBLE，要求人工确认、dry-run 与执行前影响记录
+  criticalServices:
+    - mysql
+    - mysqld
+    - postgresql
+    - postgres
+    - redis
+    - nginx
+    - ssh
+    - sshd
+    - docker
+    - containerd
+    - firewalld
+    - ufw
+    - iptables
+
+  # 变更类二进制：普通变更为 EXECUTABLE，触及关键路径/核心服务升级为 IRREVERSIBLE
   reviewBinaries:
     - rm
     - rmdir
@@ -77,7 +93,7 @@ guard:
     - userdel
     - passwd
 
-  # 只读/感知类白名单：安全（SAFE）
+  # 只读/感知类白名单：READONLY
   readOnlyBinaries:
     - ls
     - cat
@@ -136,3 +152,21 @@ guard:
     - "\\bpython(3)?\\b.{0,80}(socket|subprocess|os\\.dup2)"
     - "echo\\s+-e\\s+.*\\\\x[0-9a-fA-F]{2}"
     - "base64\\s+(-d|--?decode)"
+
+  # 输出侧横切脱敏：统一作用于执行输出、API/SSE 返回和审计视图
+  sensitivePatterns:
+    - name: password
+      regex: "(?i)(password|passwd|pwd)\\s*[:=]\\s*[^\\s]+"
+      replacement: "$1=***"
+    - name: token
+      regex: "(?i)(token|access_token|refresh_token|authorization)\\s*[:=]\\s*[^\\s]+"
+      replacement: "$1=***"
+    - name: secret_key
+      regex: "(?i)(secret|secret_key|access_key|ak|sk)\\s*[:=]\\s*[^\\s]+"
+      replacement: "$1=***"
+    - name: jdbc_url
+      regex: "jdbc:[^\\s]+"
+      replacement: "jdbc:***"
+    - name: private_key
+      regex: "-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----[\\s\\S]*?-----END (RSA |EC |OPENSSH )?PRIVATE KEY-----"
+      replacement: "-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----"

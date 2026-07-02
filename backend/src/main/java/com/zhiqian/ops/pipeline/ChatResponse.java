@@ -6,6 +6,7 @@ import com.zhiqian.ops.guard.InjectionResult;
 import com.zhiqian.ops.guard.RiskDecision;
 import com.zhiqian.ops.guard.SecurityScore;
 import com.zhiqian.ops.llm.PlanResult;
+import com.zhiqian.ops.planner.OpsExecutionPlan;
 import com.zhiqian.ops.retriever.Evidence;
 
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ public class ChatResponse {
     private String status;
     private String message;
     private PlanResult plan;
+    private OpsExecutionPlan executionPlan;
     private InjectionResult injection;
     private List<RiskDecision> decisions = new ArrayList<>();
     private List<Map<String, Object>> execResults = new ArrayList<>();
@@ -38,6 +40,8 @@ public class ChatResponse {
     public void setMessage(String message) { this.message = message; }
     public PlanResult getPlan() { return plan; }
     public void setPlan(PlanResult plan) { this.plan = plan; }
+    public OpsExecutionPlan getExecutionPlan() { return executionPlan; }
+    public void setExecutionPlan(OpsExecutionPlan executionPlan) { this.executionPlan = executionPlan; }
     public InjectionResult getInjection() { return injection; }
     public void setInjection(InjectionResult injection) { this.injection = injection; }
     public List<RiskDecision> getDecisions() { return decisions; }

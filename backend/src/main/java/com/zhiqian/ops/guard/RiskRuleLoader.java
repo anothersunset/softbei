@@ -27,8 +27,9 @@ public class RiskRuleLoader {
             RiskRulesFile file = mapper.readValue(in, RiskRulesFile.class);
             this.rules = file.getGuard() != null ? file.getGuard() : new GuardRules();
         }
-        log.info("loaded risk rules: {} blocked patterns, {} critical paths, {} injection patterns",
-                rules.getBlockedPatterns().size(), rules.getCriticalPaths().size(), rules.getInjectionPatterns().size());
+        log.info("loaded risk rules: {} blocked patterns, {} critical paths, {} critical services, {} injection patterns",
+                rules.getBlockedPatterns().size(), rules.getCriticalPaths().size(),
+                rules.getCriticalServices().size(), rules.getInjectionPatterns().size());
     }
 
     public GuardRules rules() { return rules; }
