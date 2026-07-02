@@ -22,14 +22,14 @@ java -jar target/ops-agent-1.0.0.jar
 
 ## 三、信任边界与入口鉴权
 
-默认配置绑定 `127.0.0.1`，仅用于本机演示。内网或公网部署时需显式开放绑定地址，并为 REST 与 HTTP MCP 入口启用同一个令牌：
+默认配置绑定 `127.0.0.1`，仅用于本机演示。内网或公网部署时需显式开放绑定地址，并为 REST 与 HTTP MCP 入口启用同一个令牌；若绑定到非回环地址但未配置令牌，服务会拒绝启动：
 
 ```bash
 export OPS_BIND_ADDRESS=0.0.0.0
 export OPS_API_TOKEN=<强随机令牌>
 ```
 
-启用后调用 `/api/ops/**` 与 `/mcp/**` 必须携带：
+启用后调用 `/api/**` 与 `/mcp/**` 必须携带：
 
 ```http
 X-Ops-Token: <强随机令牌>
