@@ -16,9 +16,12 @@ import com.zhiqian.ops.guard.IntentRiskGuard;
 import com.zhiqian.ops.guard.PromptInjectionDetector;
 import com.zhiqian.ops.guard.RiskDecision;
 import com.zhiqian.ops.guard.RiskLevel;
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
 import com.zhiqian.ops.llm.LlmClient;
 import com.zhiqian.ops.llm.PlanResult;
 import com.zhiqian.ops.llm.PlanStep;
+import com.zhiqian.ops.planner.ExecutionPlanner;
+import com.zhiqian.ops.planner.OpsExecutionPlan;
 import com.zhiqian.ops.retriever.ContextRetriever;
 import com.zhiqian.ops.retriever.Evidence;
 import com.zhiqian.ops.trace.OpsAuditService;
@@ -34,8 +37,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * 安全护栏编排管线：接收指令 -> 抗注入 -> 感知环境 -> 知识检索 -> 推理决策 -> 安全校验 -> 执行 -> 根因分析。
- * 复用原项目 AgentRunner 「逐节点迭代 + onStep 回调」模式，每步均落盘溯源。
+ * 安全护栏编排管线：接收指令 -> 抗注入 -> 感知环境 -> 知识检索 -> 推理决策 -> 任务规划 -> 安全校验 -> 执行 -> 根因分析。
+ * 复用原项目 AgentRunner 「逐节点迭代 + onStep 回调」模式，每步均落盘滯源。
  * 另提供带 stepListener 的 chat 重载，供 SSE 实时逐步推送思维链（不改变裁决与状态机）。
  */
 @Service
@@ -50,6 +53,8 @@ public class OpsPipeline {
     private final List<AgentTool> senseTools;
     private final ContextRetriever retriever;
     private final ExecProperties execProps;
+    private final SensitiveDataSanitizer sanitizer;
+    private final ExecutionPlanner executionPlanner = new ExecutionPlanner();
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, CachedPlan> planCache = new ConcurrentHashMap<>();
 
@@ -62,7 +67,8 @@ public class OpsPipeline {
                        LeastPrivilegeExecutor executor,
                        List<AgentTool> senseTools,
                        ContextRetriever retriever,
-                       ExecProperties execProps) {
+                       ExecProperties execProps,
+                       SensitiveDataSanitizer sanitizer) {
         this.runner = runner;
         this.injectionDetector = injectionDetector;
         this.guard = guard;
@@ -73,6 +79,7 @@ public class OpsPipeline {
         this.senseTools = senseTools;
         this.retriever = retriever;
         this.execProps = execProps;
+        this.sanitizer = sanitizer;
     }
 
     public ChatResponse chat(ChatRequest req) {
@@ -95,7 +102,7 @@ public class OpsPipeline {
 
         // 安全修复(P0)：confirm 仅在命中「已缓存的待确认计划」时才生效。
         // 否则一律视为未确认，防止首次请求直接携带 confirm=true（或伪造 traceId）
-        // 绕过 REVIEW 人工确认门禁、把变更类指令直接推到执行阶段。
+        // 绕过人工确认门禁、把变更类指令直接推到执行阶段。
         confirm = false;
 
         OpsTrace trace = audit.newTrace(instruction);
@@ -107,7 +114,7 @@ public class OpsPipeline {
 
         List<AgentNode> nodes = List.of(
                 new ReceiveNode(), new InjectionNode(), new SenseNode(), new RetrieveNode(),
-                new ReasonNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
+                new ReasonNode(), new PlanNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
         List<AgentStep> steps = runner.run(nodes, ctx, s -> {
             audit.appendStep(trace.getTraceId(), s);
             if (stepListener != null) stepListener.accept(s);
@@ -132,7 +139,7 @@ public class OpsPipeline {
         // 安全修复(P1)：重跑「感知 + 检索」节点，补全确认执行后处置报告的「感知证据 / 知识依据」，
         // 避免确认链路只剩 校验/执行/分析 三步、retrieval=0 的断层问题。
         List<AgentNode> nodes = List.of(
-                new SenseNode(), new RetrieveNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
+                new SenseNode(), new RetrieveNode(), new PlanNode(), new GuardNode(), new ExecuteNode(), new AnalyzeNode());
         List<AgentStep> steps = runner.run(nodes, ctx, s -> {
             audit.appendStep(traceId, s);
             if (stepListener != null) stepListener.accept(s);
@@ -158,6 +165,10 @@ public class OpsPipeline {
         if (decisions instanceof List<?> list) {
             resp.setDecisions((List<RiskDecision>) list);
         }
+        Object executionPlan = ctx.state().get("executionPlan");
+        if (executionPlan instanceof OpsExecutionPlan ep) {
+            resp.setExecutionPlan(ep);
+        }
         Object exec = ctx.state().get("execResults");
         if (exec instanceof List<?> list) {
             resp.setExecResults((List<Map<String, Object>>) list);
@@ -172,12 +183,7 @@ public class OpsPipeline {
         }
 
         boolean injectionBlocked = Boolean.TRUE.equals(ctx.state().get("injectionBlocked"));
-        RiskLevel worst = (RiskLevel) ctx.state().getOrDefault("worstLevel", RiskLevel.SAFE);
-        // 空计划判定：真实模型在模型侧拒绝高危指令、或推理输出无法解析时，计划为空/无步骤，
-        // 此时无任何命令进入校验与执行，不应再以 EXECUTED「已完成闭环」呈现（会误导评委/用户）。
-        boolean planEmpty = resp.getPlan() == null
-                || resp.getPlan().getSteps() == null
-                || resp.getPlan().getSteps().isEmpty();
+        RiskLevel worst = (RiskLevel) ctx.state().getOrDefault("worstLevel", RiskLevel.READONLY);
         String status;
         String message;
         if (injectionBlocked) {
@@ -186,16 +192,15 @@ public class OpsPipeline {
         } else if (worst == RiskLevel.BLOCK) {
             status = "BLOCKED";
             message = "计划中含有命中红线的高危指令，已拒绝执行。";
-        } else if (worst == RiskLevel.REVIEW && !confirm) {
+        } else if (worst.requiresApproval() && !confirm) {
             status = "REVIEW_PENDING";
-            message = "计划中含有需人工确认的变更类指令，请确认后重试（confirm=true）。";
+            message = worst == RiskLevel.IRREVERSIBLE
+                    ? "计划中含有高危不可逆指令，需人工确认、dry-run 与执行前备份/影响记录。"
+                    : "计划中含有需人工确认的受限变更指令，请确认后重试（confirm=true）。";
             // 缓存计划供后续确认
             if (resp.getPlan() != null) {
                 planCache.put(resp.getTraceId(), new CachedPlan(instruction, resp.getPlan()));
             }
-        } else if (planEmpty) {
-            status = "NO_OP";
-            message = "模型未产出可执行计划（可能在模型侧已拒绝高危指令，或推理输出无法解析），未执行任何操作。";
         } else {
             status = "EXECUTED";
             message = "已完成闭环处理。";
@@ -327,29 +332,54 @@ public class OpsPipeline {
         }
     }
 
+    private class PlanNode implements AgentNode {
+        public String stage() { return TraceStage.PLAN.name(); }
+        public String agentName() { return "ExecutionPlanner"; }
+        @SuppressWarnings("unchecked")
+        public Map<String, Object> run(AgentContext ctx) {
+            String instruction = String.valueOf(ctx.state().get("instruction"));
+            PlanResult plan = (PlanResult) ctx.state().get("plan");
+            List<Evidence> evidence = new ArrayList<>();
+            Object ret = ctx.state().get("retrieval");
+            if (ret instanceof List<?> list) {
+                evidence = (List<Evidence>) list;
+            }
+            OpsExecutionPlan executionPlan = executionPlanner.build(instruction, plan, evidence);
+            ctx.state().put("executionPlan", executionPlan);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("strategy", executionPlan.getStrategy());
+            out.put("executionMode", executionPlan.getExecutionMode());
+            out.put("summary", executionPlan.getSummary());
+            out.put("commandCount", executionPlan.getCommandCount());
+            out.put("tasks", executionPlan.getTasks());
+            return out;
+        }
+    }
+
     private class GuardNode implements AgentNode {
         public String stage() { return TraceStage.GUARD.name(); }
         public String agentName() { return "IntentRiskGuard"; }
         public Map<String, Object> run(AgentContext ctx) {
             PlanResult plan = (PlanResult) ctx.state().get("plan");
             List<RiskDecision> decisions = new ArrayList<>();
-            RiskLevel worst = RiskLevel.SAFE;
+            RiskLevel worst = RiskLevel.READONLY;
             if (plan != null) {
                 for (PlanStep step : plan.getSteps()) {
                     RiskDecision d = guard.evaluate(step.getCommand());
                     decisions.add(d);
-                    if (d.level() == RiskLevel.BLOCK) {
-                        worst = RiskLevel.BLOCK;
-                    } else if (d.level() == RiskLevel.REVIEW && worst != RiskLevel.BLOCK) {
-                        worst = RiskLevel.REVIEW;
-                    }
+                    worst = RiskLevel.max(worst, d.level());
                 }
             }
             ctx.state().put("decisions", decisions);
             ctx.state().put("worstLevel", worst);
+            Object executionPlan = ctx.state().get("executionPlan");
+            if (executionPlan instanceof OpsExecutionPlan ep) {
+                executionPlanner.attachDecisions(ep, decisions);
+            }
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("decisions", decisions);
             out.put("worstLevel", worst);
+            out.put("executionPlan", executionPlan);
             return out;
         }
     }
@@ -373,16 +403,21 @@ public class OpsPipeline {
                 if (d.level() == RiskLevel.BLOCK) {
                     er.put("executed", false);
                     er.put("output", "命中安全红线，已拒绝执行");
-                } else if (d.level() == RiskLevel.REVIEW && !confirm) {
+                } else if (d.level().requiresApproval() && !confirm) {
                     er.put("executed", false);
-                    er.put("output", "需人工二次确认后才会执行");
+                    er.put("requiresApproval", d.requiresApproval());
+                    er.put("requiresBackup", d.requiresBackup());
+                    er.put("requiresDryRun", d.requiresDryRun());
+                    er.put("output", d.level() == RiskLevel.IRREVERSIBLE
+                            ? "高危不可逆操作需人工确认、执行前备份/快照与 dry-run 验证"
+                            : "受限变更需人工二次确认后才会执行");
                 } else if (executedCount >= maxSteps) {
                     cappedCount++;
                     er.put("executed", false);
                     er.put("output", "[circuit] 已达单次最大执行轮次上限(" + maxSteps + ")，为保证关键任务确定性、防止失控与死循环，剩余指令暂停执行，请分批处理或人工介入");
                 } else {
                     List<String> argv = tokenize(d.command());
-                    ExecResult res = d.level() == RiskLevel.SAFE
+                    ExecResult res = d.level() == RiskLevel.READONLY
                             ? executor.runReadOnly(argv)
                             : executor.run(argv);
                     executedCount++;
@@ -393,13 +428,18 @@ public class OpsPipeline {
                     if (res.stderr() != null && !res.stderr().isBlank()) {
                         output = output + "\n[stderr] " + res.stderr();
                     }
-                    er.put("output", output);
+                    er.put("output", sanitizer == null ? output : sanitizer.sanitize(output));
                 }
                 execResults.add(er);
             }
             ctx.state().put("execResults", execResults);
+            Object executionPlan = ctx.state().get("executionPlan");
+            if (executionPlan instanceof OpsExecutionPlan ep) {
+                executionPlanner.attachExecutionResults(ep, execResults);
+            }
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("execResults", execResults);
+            out.put("executionPlan", executionPlan);
             out.put("executedCount", executedCount);
             out.put("maxStepsPerRequest", maxSteps);
             if (cappedCount > 0) {

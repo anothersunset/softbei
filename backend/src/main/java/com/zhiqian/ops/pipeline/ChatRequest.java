@@ -1,7 +1,7 @@
 package com.zhiqian.ops.pipeline;
 
 /**
- * 运维对话请求。confirm=true 且携带 traceId 时，表示对之前 REVIEW 挂起的计划进行人工确认执行。
+ * 运维对话请求。confirm=true 且携带 traceId 时，表示对之前待确认的变更计划进行人工确认执行。
  */
 public class ChatRequest {
     private String instruction;

@@ -99,7 +99,7 @@ public class CrossSourceRca {
                     level, f.category(),
                     f.title() + " 根因研判",
                     correlation, rootCause(f.id(), metricCritical, kindMatch, matched),
-                    f.suggestion() + "（处置须走主链路：高危指令经 REVIEW + 人工确认后执行，并保留一键回滚账本）",
+                    f.suggestion() + "（处置须走主链路：高危指令经 EXECUTABLE/IRREVERSIBLE + 人工确认后执行，并保留一键回滚账本）",
                     disposition(level), confidence(metricCritical, logElevated, kindMatch), chain));
         }
 

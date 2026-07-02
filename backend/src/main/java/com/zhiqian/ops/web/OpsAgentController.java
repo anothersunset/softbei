@@ -11,6 +11,7 @@ import com.zhiqian.ops.guard.RiskDecision;
 import com.zhiqian.ops.guard.RiskLevel;
 import com.zhiqian.ops.guard.RollbackAdvisor;
 import com.zhiqian.ops.guard.SecurityScorer;
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
 import com.zhiqian.ops.llm.LlmClient;
 import com.zhiqian.ops.pipeline.ChatRequest;
 import com.zhiqian.ops.pipeline.ChatResponse;
@@ -42,6 +43,7 @@ public class OpsAgentController {
     private final ExecProperties execProperties;
     private final ApiSecurityProperties apiSecurityProperties;
     private final Environment environment;
+    private final SensitiveDataSanitizer sanitizer;
     private final SecurityScorer securityScorer = new SecurityScorer();
     private final CounterfactualAnalyzer counterfactual = new CounterfactualAnalyzer();
     private final RollbackAdvisor rollbackAdvisor = new RollbackAdvisor();
@@ -49,7 +51,8 @@ public class OpsAgentController {
     public OpsAgentController(OpsPipeline pipeline, List<AgentTool> tools,
                               RollbackLedger rollbackLedger, LeastPrivilegeExecutor executor,
                               LlmClient llm, ExecProperties execProperties,
-                              ApiSecurityProperties apiSecurityProperties, Environment environment) {
+                              ApiSecurityProperties apiSecurityProperties, Environment environment,
+                              SensitiveDataSanitizer sanitizer) {
         this.pipeline = pipeline;
         this.tools = tools;
         this.rollbackLedger = rollbackLedger;
@@ -58,6 +61,7 @@ public class OpsAgentController {
         this.execProperties = execProperties;
         this.apiSecurityProperties = apiSecurityProperties;
         this.environment = environment;
+        this.sanitizer = sanitizer;
     }
 
     @PostMapping("/chat")
@@ -70,14 +74,10 @@ public class OpsAgentController {
     /** 在不改变管线裁决与 status 的前提下，补充安全评分、反事实回放与可一键回滚的动作账本（纯计算）。 */
     private void enrich(ChatResponse resp) {
         boolean injectionBlocked = "INJECTION_BLOCKED".equals(resp.getStatus());
-        RiskLevel worst = RiskLevel.SAFE;
+        RiskLevel worst = RiskLevel.READONLY;
         if (resp.getDecisions() != null) {
             for (RiskDecision d : resp.getDecisions()) {
-                if (d.level() == RiskLevel.BLOCK) {
-                    worst = RiskLevel.BLOCK;
-                } else if (d.level() == RiskLevel.REVIEW && worst != RiskLevel.BLOCK) {
-                    worst = RiskLevel.REVIEW;
-                }
+                worst = RiskLevel.max(worst, d.level());
             }
         }
         resp.setSecurityScore(securityScorer.score(
@@ -147,7 +147,7 @@ public class OpsAgentController {
                 if (er.stderr() != null && !er.stderr().isBlank()) {
                     output = output + "\n[stderr] " + er.stderr();
                 }
-                r.put("output", output);
+                r.put("output", sanitizer == null ? output : sanitizer.sanitize(output));
             } else {
                 r.put("rolledBack", false);
                 r.put("note", "需人工恢复（见 manual 指引）");

@@ -67,7 +67,7 @@ class BlindsetRunnerTest {
                 else { cmdFN++; ok = false; failures.add(id + " [FN] " + d.level() + " | " + input); }
             } else if ("command-safe".equals(type)) {
                 RiskDecision d = guard.evaluate(input);
-                if (d.level() == RiskLevel.SAFE) { cmdTN++; ok = true; }
+                if (d.level() == RiskLevel.READONLY) { cmdTN++; ok = true; }
                 else { cmdFP++; ok = false; failures.add(id + " [FP] " + d.level() + " (" + d.matchedRule() + ") | " + input); }
             } else {
                 ok = false;

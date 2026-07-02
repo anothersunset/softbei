@@ -10,6 +10,8 @@ import com.zhiqian.ops.mcp.McpToolSpec;
 import com.zhiqian.ops.exec.ExecResult;
 import com.zhiqian.ops.exec.ExecRequest;
 import com.zhiqian.ops.guard.*;
+import com.zhiqian.ops.planner.OpsExecutionPlan;
+import com.zhiqian.ops.planner.OpsTask;
 
 import org.junit.jupiter.api.Test;
 
@@ -139,9 +141,41 @@ class DataClassesCoverageTest {
         resp.setTraceId("t1");
         resp.setStatus("EXECUTED");
         resp.setMessage("reply");
+        var executionPlan = new OpsExecutionPlan();
+        executionPlan.setExecutionMode("sequential-with-human-gates");
+        resp.setExecutionPlan(executionPlan);
         assertEquals("t1", resp.getTraceId());
         assertEquals("EXECUTED", resp.getStatus());
         assertEquals("reply", resp.getMessage());
+        assertEquals("sequential-with-human-gates", resp.getExecutionPlan().getExecutionMode());
+    }
+
+    @Test
+    void opsExecutionPlan_pojo() {
+        var task = new OpsTask("T1", "OBSERVE", "title", "objective");
+        task.setCommands(List.of("df -h"));
+        task.setCommandIndexes(List.of(0));
+        task.setDependsOn(List.of("T0"));
+        task.setEvidenceRefs(List.of("runbook"));
+        task.setExpectedRisk("READONLY");
+        task.setStatus("READY");
+        task.setResultSummary("ok");
+
+        var plan = new OpsExecutionPlan();
+        plan.setStrategy("Plan-and-Execute");
+        plan.setExecutionMode("sequential");
+        plan.setSummary("summary");
+        plan.setCommandCount(1);
+        plan.setTasks(List.of(task));
+
+        assertEquals("Plan-and-Execute", plan.getStrategy());
+        assertEquals("sequential", plan.getExecutionMode());
+        assertEquals("summary", plan.getSummary());
+        assertEquals(1, plan.getCommandCount());
+        assertEquals("T1", plan.getTasks().get(0).getId());
+        assertEquals("OBSERVE", plan.getTasks().get(0).getPhase());
+        assertEquals("READY", plan.getTasks().get(0).getStatus());
+        assertEquals("ok", plan.getTasks().get(0).getResultSummary());
     }
 
     // ── McpToolSpec (mcp) ──
@@ -173,16 +207,16 @@ class DataClassesCoverageTest {
     // ── Guard records ──
     @Test
     void riskDecision_record() {
-        var d = new RiskDecision("cmd", RiskLevel.SAFE, "reason", "rule");
+        var d = new RiskDecision("cmd", RiskLevel.READONLY, "reason", "rule");
         assertEquals("cmd", d.command());
-        assertEquals(RiskLevel.SAFE, d.level());
+        assertEquals(RiskLevel.READONLY, d.level());
     }
 
     @Test
     void riskLevel_enum_values() {
-        assertEquals(3, RiskLevel.values().length);
-        assertEquals(RiskLevel.SAFE, RiskLevel.valueOf("SAFE"));
-        assertEquals(RiskLevel.REVIEW, RiskLevel.valueOf("REVIEW"));
+        assertEquals(4, RiskLevel.values().length);
+        assertEquals(RiskLevel.READONLY, RiskLevel.valueOf("READONLY"));
+        assertEquals(RiskLevel.EXECUTABLE, RiskLevel.valueOf("EXECUTABLE"));
         assertEquals(RiskLevel.BLOCK, RiskLevel.valueOf("BLOCK"));
     }
 

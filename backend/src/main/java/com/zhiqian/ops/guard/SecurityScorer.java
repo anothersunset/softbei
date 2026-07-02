@@ -32,16 +32,20 @@ public class SecurityScorer {
                             && (d.matchedRule().equals("metacharacter")
                             || d.matchedRule().equals("blockedPattern")
                             || d.matchedRule().equals("criticalPath")));
-            boolean anyReview = decisions.stream().anyMatch(d -> d.level() == RiskLevel.REVIEW);
+            boolean anyIrreversible = decisions.stream().anyMatch(d -> d.level() == RiskLevel.IRREVERSIBLE);
+            boolean anyExecutable = decisions.stream().anyMatch(d -> d.level() == RiskLevel.EXECUTABLE);
             if (hardBlock) {
                 staticRisk = 30;
                 notes.add("静态层：红线规则精准命中并拦截高危命令(30/30)");
-            } else if (worst == RiskLevel.SAFE) {
+            } else if (worst == RiskLevel.READONLY) {
                 staticRisk = 28;
-                notes.add("静态层：规则确认全部为只读/安全命令(28/30)");
-            } else if (anyReview) {
+                notes.add("静态层：规则确认全部为只读感知命令(28/30)");
+            } else if (anyIrreversible) {
+                staticRisk = 24;
+                notes.add("静态层：规则识别出高危不可逆命令并要求备份/人工确认(24/30)");
+            } else if (anyExecutable) {
                 staticRisk = 22;
-                notes.add("静态层：规则将变更类命令标记为需人工确认(22/30)");
+                notes.add("静态层：规则将受限变更命令标记为需人工确认(22/30)");
             } else {
                 staticRisk = 24;
                 notes.add("静态层：规则完成评估(24/30)");
@@ -56,9 +60,12 @@ public class SecurityScorer {
         } else if (worst == RiskLevel.BLOCK) {
             dynamicAudit = 33;
             notes.add("动态层：意图审计通过，且高危意图被二次过滤(33/35)");
-        } else if (worst == RiskLevel.REVIEW) {
+        } else if (worst == RiskLevel.IRREVERSIBLE) {
+            dynamicAudit = 31;
+            notes.add("动态层：意图审计识别出高危不可逆变更并升级确认(31/35)");
+        } else if (worst == RiskLevel.EXECUTABLE) {
             dynamicAudit = 29;
-            notes.add("动态层：意图审计识别出需确认的变更意图(29/35)");
+            notes.add("动态层：意图审计识别出需确认的受限变更意图(29/35)");
         } else {
             dynamicAudit = 32;
             notes.add("动态层：注入检测通过，意图审计未发现异常(32/35)");
@@ -74,7 +81,7 @@ public class SecurityScorer {
                     anyExecuted = true;
                     boolean dryRun = Boolean.TRUE.equals(er.get("dryRun"));
                     Object level = er.get("level");
-                    boolean isSafe = RiskLevel.SAFE == level || "SAFE".equals(String.valueOf(level));
+                    boolean isSafe = RiskLevel.READONLY == level || "READONLY".equals(String.valueOf(level));
                     if (!dryRun && !isSafe) {
                         anyRealExec = true;
                     }

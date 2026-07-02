@@ -150,13 +150,13 @@ class RedTeamCorpusTest {
 
         @Test
         void should_pass_when_readOnlyCommand() {
-            List<JsonNode> cases = filter("command", null, RiskLevel.SAFE);
+            List<JsonNode> cases = filter("command", null, RiskLevel.READONLY);
             assertFalse(cases.isEmpty(), "只读命令正样本不能为空");
             assertAllPass(cases, "命令拦截-应SAFE", (c, failures) -> {
                 String id = c.path("id").asText();
                 String input = c.path("input").asText();
                 RiskDecision d = guard.evaluate(input);
-                if (d.level() != RiskLevel.SAFE) {
+                if (d.level() != RiskLevel.READONLY) {
                     failures.add(id + " [command] 期望=SAFE 实际=" + d.level()
                             + " (" + d.matchedRule() + ") 输入=" + input);
                 }
@@ -192,7 +192,7 @@ class RedTeamCorpusTest {
                 RiskLevel actual = d.level();
                 ok = expected == actual;
                 if (expected == RiskLevel.BLOCK) { cmdBlock++; if (actual == RiskLevel.BLOCK) cmdBlockHit++; }
-                else if (expected == RiskLevel.SAFE) { cmdSafe++; if (actual != RiskLevel.SAFE) cmdSafeFp++; }
+                else if (expected == RiskLevel.READONLY) { cmdSafe++; if (actual != RiskLevel.READONLY) cmdSafeFp++; }
             } else {
                 ok = false;
             }

@@ -11,6 +11,7 @@ import com.zhiqian.ops.exec.RollbackLedger;
 import com.zhiqian.ops.guard.IntentRiskGuard;
 import com.zhiqian.ops.guard.PromptInjectionDetector;
 import com.zhiqian.ops.guard.RiskRuleLoader;
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
 import com.zhiqian.ops.llm.MockLlmClient;
 import com.zhiqian.ops.retriever.ContextRetriever;
 import com.zhiqian.ops.trace.OpsAuditService;
@@ -45,8 +46,12 @@ class OpsPipelineDeepIntegrationTest {
 
         assertEquals("REVIEW_PENDING", pending.getStatus());
         assertNotNull(pending.getTraceId());
-        assertEquals(8, pending.getSteps().size());
-        assertTrue(pending.getDecisions().stream().anyMatch(d -> d.level().name().equals("REVIEW")));
+        assertEquals(9, pending.getSteps().size());
+        assertTrue(pending.getSteps().stream().anyMatch(s -> "PLAN".equals(s.stage())));
+        assertNotNull(pending.getExecutionPlan());
+        assertEquals("sequential-with-human-gates", pending.getExecutionPlan().getExecutionMode());
+        assertTrue(pending.getExecutionPlan().getTasks().stream().anyMatch(t -> "CHANGE".equals(t.getPhase())));
+        assertTrue(pending.getDecisions().stream().anyMatch(d -> d.level().requiresApproval()));
         assertTrue(pending.getExecResults().stream().allMatch(r -> Boolean.FALSE.equals(r.get("executed"))));
 
         ChatRequest confirm = new ChatRequest();
@@ -61,6 +66,9 @@ class OpsPipelineDeepIntegrationTest {
         assertEquals("systemctl restart nginx", executed.getExecResults().get(0).get("command"));
         assertEquals(Boolean.TRUE, executed.getExecResults().get(0).get("dryRun"));
         assertFalse(executed.getRollbackPlan().isEmpty());
+        assertNotNull(executed.getExecutionPlan());
+        assertTrue(executed.getExecutionPlan().getTasks().stream()
+                .anyMatch(t -> "DRY_RUN_EXECUTED".equals(t.getStatus())));
 
         Map<String, Object> rollback = controller.rollback(executed.getTraceId()).getData();
         assertEquals(executed.getTraceId(), rollback.get("traceId"));
@@ -100,6 +108,7 @@ class OpsPipelineDeepIntegrationTest {
 
     private OpsAgentController controller() throws Exception {
         RiskRuleLoader rules = new RiskRuleLoader();
+        SensitiveDataSanitizer sanitizer = new SensitiveDataSanitizer(rules);
         ExecProperties execProps = new ExecProperties();
         execProps.setDryRun(true);
         execProps.setWorkingDir(tempDir.toString());
@@ -117,11 +126,13 @@ class OpsPipelineDeepIntegrationTest {
                 executor,
                 List.of(new FakeSenseTool()),
                 new ContextRetriever(audit, rules),
-                execProps);
+                execProps,
+                sanitizer);
 
         return new OpsAgentController(pipeline, List.of(new FakeSenseTool()), new RollbackLedger(), executor,
                 new MockLlmClient(), execProps, new ApiSecurityProperties(),
-                new MockEnvironment().withProperty("server.address", "127.0.0.1"));
+                new MockEnvironment().withProperty("server.address", "127.0.0.1"),
+                sanitizer);
     }
 
     private static final class FakeSenseTool implements AgentTool {

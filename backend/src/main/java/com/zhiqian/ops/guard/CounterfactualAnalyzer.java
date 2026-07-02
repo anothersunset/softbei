@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 反事实回放分析器：对被 BLOCK / REVIEW 的命令做纯静态分析，
+ * 反事实回放分析器：对被 BLOCK / EXECUTABLE / IRREVERSIBLE 的命令做纯静态分析，
  * 推演「若放行会发生什么」，给出不可逆等级、影响范围、最坏后果与回滚建议。
  * 全程不执行任何命令，零副作用。
  */
@@ -17,7 +17,7 @@ public class CounterfactualAnalyzer {
             return out;
         }
         for (RiskDecision d : decisions) {
-            if (d.level() == RiskLevel.BLOCK || d.level() == RiskLevel.REVIEW) {
+            if (d.level() == RiskLevel.BLOCK || d.level().requiresApproval()) {
                 out.add(estimate(d));
             }
         }

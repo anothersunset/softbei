@@ -78,7 +78,7 @@ public class RollbackAdvisor {
         return r;
     }
 
-    /** 为一组裁决生成动作账本：仅纳入「已执行的变更类」命令（SAFE 只读与未执行/BLOCK 不计）。 */
+    /** 为一组裁决生成动作账本：仅纳入「已执行的变更类」命令（READONLY 只读与未执行/BLOCK 不计）。 */
     public List<Map<String, Object>> buildLedger(List<RiskDecision> decisions, List<Map<String, Object>> execResults) {
         List<Map<String, Object>> ledger = new ArrayList<>();
         if (decisions == null) {
@@ -86,7 +86,7 @@ public class RollbackAdvisor {
         }
         for (int i = 0; i < decisions.size(); i++) {
             RiskDecision d = decisions.get(i);
-            if (d.level() == RiskLevel.SAFE) {
+            if (d.level() == RiskLevel.READONLY || d.level() == RiskLevel.BLOCK) {
                 continue;
             }
             boolean executed = false;
