@@ -14,9 +14,11 @@ import com.zhiqian.ops.guard.RiskRuleLoader;
 import com.zhiqian.ops.llm.MockLlmClient;
 import com.zhiqian.ops.retriever.ContextRetriever;
 import com.zhiqian.ops.trace.OpsAuditService;
+import com.zhiqian.ops.web.ApiSecurityProperties;
 import com.zhiqian.ops.web.OpsAgentController;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -92,6 +94,8 @@ class OpsPipelineDeepIntegrationTest {
         assertEquals(Boolean.TRUE, runtime.get("mockDeterministic"));
         assertEquals(Boolean.TRUE, runtime.get("dryRun"));
         assertEquals(20, runtime.get("maxStepsPerRequest"));
+        assertEquals(Boolean.FALSE, runtime.get("apiTokenRequired"));
+        assertEquals("127.0.0.1", runtime.get("bindAddress"));
     }
 
     private OpsAgentController controller() throws Exception {
@@ -116,7 +120,8 @@ class OpsPipelineDeepIntegrationTest {
                 execProps);
 
         return new OpsAgentController(pipeline, List.of(new FakeSenseTool()), new RollbackLedger(), executor,
-                new MockLlmClient(), execProps);
+                new MockLlmClient(), execProps, new ApiSecurityProperties(),
+                new MockEnvironment().withProperty("server.address", "127.0.0.1"));
     }
 
     private static final class FakeSenseTool implements AgentTool {

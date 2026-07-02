@@ -1,5 +1,7 @@
 server:
   port: 8080
+  # 默认仅本机演示可访问；内网/公网部署请显式设置 OPS_BIND_ADDRESS 并启用 OPS_API_TOKEN。
+  address: ${OPS_BIND_ADDRESS:127.0.0.1}
 
 spring:
   application:
@@ -39,6 +41,9 @@ ops:
     log-error-critical: 100
   trace:
     file: ${OPS_TRACE_FILE:logs/ops-trace.jsonl}
+  security:
+    # 为空时关闭 token 校验，适合默认 127.0.0.1 本地演示；非本机部署建议设置强随机值。
+    api-token: ${OPS_API_TOKEN:}
 
 management:
   endpoints:

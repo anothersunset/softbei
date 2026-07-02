@@ -16,17 +16,38 @@
 cd backend
 mvn -B clean package -DskipTests
 java -jar target/ops-agent-1.0.0.jar
-# 浏览器打开 http://<服务器IP>:8080/
+# 浏览器打开 http://127.0.0.1:8080/
 ```
 默认以 `mock` 推理 + `dry-run=true` 运行，无需外部依赖即可演示全链路。
 
-## 三、容器化部署
+## 三、信任边界与入口鉴权
+
+默认配置绑定 `127.0.0.1`，仅用于本机演示。内网或公网部署时需显式开放绑定地址，并为 REST 与 HTTP MCP 入口启用同一个令牌：
+
+```bash
+export OPS_BIND_ADDRESS=0.0.0.0
+export OPS_API_TOKEN=<强随机令牌>
+```
+
+启用后调用 `/api/ops/**` 与 `/mcp/**` 必须携带：
+
+```http
+X-Ops-Token: <强随机令牌>
+```
+
+或：
+
+```http
+Authorization: Bearer <强随机令牌>
+```
+
+## 四、容器化部署
 ```bash
 # 在项目根目录
 docker compose -f deploy/docker-compose.loong64.yml up -d --build
 ```
 
-## 四、接入国产模型
+## 五、接入国产模型
 修改 `application.yml` 或环境变量：
 ```yaml
 ops:
@@ -37,7 +58,7 @@ ops:
     api-key: <YOUR_KEY>
 ```
 
-## 五、启用真实执行与最小权限（生产）
+## 六、启用真实执行与最小权限（生产）
 ```bash
 sudo OPS_USER=opsagent bash deploy/scripts/setup-ops-user.sh
 ```
@@ -50,3 +71,14 @@ ops:
     run-as-user: opsagent
 ```
 > 安全双重防护：应用层 `IntentRiskGuard` + OS 层 `sudoers` 白名单，两道防线互为冗余。
+
+## 七、审计取证兜底（可选）
+
+仓库提供 `deploy/auditd-rules.conf` 作为 auditd 参考规则，覆盖账号、sudoers、systemd 配置和数据库数据目录等关键路径：
+
+```bash
+sudo install -m 0640 deploy/auditd-rules.conf /etc/audit/rules.d/opsguard.rules
+sudo augenrules --load
+```
+
+注意：auditd 只负责事后取证，不负责阻止破坏。预防性控制仍来自应用护栏、最小权限账号、sudoers 白名单、ACL/只读挂载等 OS 层配置。
