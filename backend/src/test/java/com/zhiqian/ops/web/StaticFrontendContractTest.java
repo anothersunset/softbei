@@ -30,7 +30,10 @@ class StaticFrontendContractTest {
         assertTrue(app.contains("executionPlan"));
         assertTrue(app.contains("function runInspect()"));
         assertTrue(app.contains("function runRedteam()"));
-        assertTrue(stream.contains("EventSource"));
+        assertTrue(html.contains("id=\"apiToken\""));
+        assertTrue(app.contains("function apiFetch"));
+        assertTrue(app.contains("X-Ops-Token"));
+        assertTrue(stream.contains("apiFetch('/api/ops/chat/stream"));
         assertTrue(stream.contains("/api/ops/chat/stream"));
     }
 }

@@ -119,10 +119,11 @@ class OpsPipelineDeepIntegrationTest {
 
         OpsAuditService audit = new OpsAuditService(tempDir.resolve("trace.jsonl").toString());
         LeastPrivilegeExecutor executor = new LeastPrivilegeExecutor(execProps, new CircuitBreaker(3, 30_000));
+        IntentRiskGuard guard = new IntentRiskGuard(rules);
         OpsPipeline pipeline = new OpsPipeline(
                 new AgentRunner(),
                 new PromptInjectionDetector(rules),
-                new IntentRiskGuard(rules),
+                guard,
                 new MockLlmClient(),
                 new RootCauseAnalyzer(),
                 audit,
@@ -135,7 +136,7 @@ class OpsPipelineDeepIntegrationTest {
         return new OpsAgentController(pipeline, List.of(new FakeSenseTool()), new RollbackLedger(), executor,
                 new MockLlmClient(), execProps, new ApiSecurityProperties(),
                 new MockEnvironment().withProperty("server.address", "127.0.0.1"),
-                sanitizer);
+                sanitizer, guard);
     }
 
     private static final class FakeSenseTool implements AgentTool {

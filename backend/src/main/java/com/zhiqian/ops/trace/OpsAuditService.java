@@ -2,6 +2,8 @@ package com.zhiqian.ops.trace;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhiqian.ops.agent.AgentStep;
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,11 +35,19 @@ public class OpsAuditService {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final Path traceFile;
+    private final SensitiveDataSanitizer sanitizer;
     private final Map<String, OpsTrace> traces = new ConcurrentHashMap<>();
     private final List<String> order = Collections.synchronizedList(new ArrayList<>());
 
     public OpsAuditService(@Value("${ops.trace.file:logs/ops-trace.jsonl}") String file) {
+        this(file, null);
+    }
+
+    @Autowired
+    public OpsAuditService(@Value("${ops.trace.file:logs/ops-trace.jsonl}") String file,
+                           SensitiveDataSanitizer sanitizer) {
         this.traceFile = Paths.get(file);
+        this.sanitizer = sanitizer;
         try {
             if (traceFile.getParent() != null) {
                 Files.createDirectories(traceFile.getParent());
@@ -60,20 +70,21 @@ public class OpsAuditService {
     }
 
     public void appendStep(String traceId, AgentStep step) {
+        AgentStep safeStep = sanitizeStep(step);
         OpsTrace t = traces.get(traceId);
         if (t != null) {
-            t.getSteps().add(step);
+            t.getSteps().add(safeStep);
         }
         Map<String, Object> line = new LinkedHashMap<>();
         line.put("traceId", traceId);
         line.put("ts", Instant.now().toString());
-        line.put("stage", step.stage());
-        line.put("agent", step.agentName());
-        line.put("status", step.status());
-        line.put("elapsedMs", step.elapsedMs());
-        line.put("model", step.model());
-        line.put("confidence", step.confidence());
-        line.put("output", step.output());
+        line.put("stage", safeStep.stage());
+        line.put("agent", safeStep.agentName());
+        line.put("status", safeStep.status());
+        line.put("elapsedMs", safeStep.elapsedMs());
+        line.put("model", safeStep.model());
+        line.put("confidence", safeStep.confidence());
+        line.put("output", safeStep.output());
         writeLine(line);
     }
 
@@ -115,6 +126,26 @@ public class OpsAuditService {
         } catch (IOException e) {
             log.warn("failed to write trace line: {}", e.getMessage());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private AgentStep sanitizeStep(AgentStep step) {
+        if (sanitizer == null || step == null) {
+            return step;
+        }
+        Object output = sanitizer.sanitizeValue(step.output());
+        Object input = sanitizer.sanitizeValue(step.input());
+        return new AgentStep(
+                step.stage(),
+                step.agentName(),
+                input instanceof Map<?, ?> inputMap ? (Map<String, Object>) inputMap : step.input(),
+                output instanceof Map<?, ?> outputMap ? (Map<String, Object>) outputMap : step.output(),
+                step.model(),
+                step.confidence(),
+                step.elapsedMs(),
+                step.tokenIn(),
+                step.tokenOut(),
+                step.status());
     }
 
     private void evict() {

@@ -93,7 +93,10 @@ class LeastPrivilegeExecutorOutputTest {
 
         assertTrue(result.success(), () -> "stdout=" + result.stdout() + "\nstderr=" + result.stderr());
         assertTrue(result.stdout().contains("password=***"));
+        assertTrue(result.stdout().contains("-----BEGIN PRIVATE KEY-----***"));
+        assertTrue(result.stdout().contains("-----END PRIVATE KEY-----"));
         assertFalse(result.stdout().contains("plain-secret"));
+        assertFalse(result.stdout().contains("private-key-body-should-not-leak"));
         assertFalse(result.stderr().contains("stderr-token"));
 
         String allAudit = Files.list(tempDir)
@@ -107,7 +110,10 @@ class LeastPrivilegeExecutorOutputTest {
                 .reduce("", String::concat);
         assertTrue(allAudit.contains("password=***"));
         assertTrue(allAudit.contains("token=***"));
+        assertTrue(allAudit.contains("-----BEGIN PRIVATE KEY-----***"));
+        assertTrue(allAudit.contains("-----END PRIVATE KEY-----"));
         assertFalse(allAudit.contains("plain-secret"));
+        assertFalse(allAudit.contains("private-key-body-should-not-leak"));
         assertFalse(allAudit.contains("stderr-token"));
     }
 

@@ -27,8 +27,8 @@
   .serif{font-family:"Iowan Old Style","Palatino Linotype","Baskerville","Source Han Serif SC","Songti SC",serif}
   .mono{font-family:ui-monospace,"SFMono-Regular","JetBrains Mono","Cascadia Code",Consolas,monospace}
   svg{display:block;flex-shrink:0}
-  button,textarea{font:inherit}
-  button:focus-visible,textarea:focus-visible,.tab:focus-visible{outline:3px solid var(--accent-soft);outline-offset:2px}
+  button,textarea,input{font:inherit}
+  button:focus-visible,textarea:focus-visible,input:focus-visible,.tab:focus-visible{outline:3px solid var(--accent-soft);outline-offset:2px}
   .wrap{position:relative;max-width:1320px;margin:0 auto;padding:26px 24px 38px}
   .top{display:flex;align-items:center;justify-content:space-between;gap:22px;margin-bottom:20px}
   .wm{display:flex;align-items:center;gap:14px;min-width:0}
@@ -40,6 +40,9 @@
   .meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
   .meta .m{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);white-space:nowrap;
     border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.72);padding:7px 10px}
+  .tokenbox{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.72);padding:5px 9px}
+  .tokenbox input{width:156px;border:0;background:transparent;color:var(--text);font-size:12px;outline:none}
+  .tokenbox input::placeholder{color:var(--faint)}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0}
   .dot.on{background:var(--safe)} .dot.warn{background:var(--review)} .dot.block{background:var(--block)}
   .grid{display:grid;grid-template-columns:minmax(300px,356px) minmax(0,1fr);gap:18px;align-items:start}
@@ -201,6 +204,7 @@
       <div class="m"><span id="healthDot" class="dot"></span><span id="healthTxt">服务检测中</span></div>
       <div class="m"><span class="dot on"></span><span>B/S · 8080</span></div>
       <div class="m"><span id="runtimeDot" class="dot warn"></span><span id="runtimeTxt">runtime 检测中</span></div>
+      <label class="tokenbox" title="公网部署启用 OPS_API_TOKEN 时填写"><span class="dot warn"></span><input id="apiToken" type="password" autocomplete="off" placeholder="X-Ops-Token" /></label>
     </div>
   </header>
 

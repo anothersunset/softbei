@@ -1,6 +1,6 @@
 /*
  * 实时思维链（Live Chain-of-Thought）客户端
- * 通过 EventSource 订阅 GET /api/ops/chat/stream，实时渲染安全护栏九阶段的逐步执行（类 ChatGPT tool_call 展示）。
+ * 通过 fetch 订阅 GET /api/ops/chat/stream，实时渲染安全护栏九阶段的逐步执行（类 ChatGPT tool_call 展示）。
  * 不依赖也不修改 app.js；所需样式与阶段进度条 DOM 均由本文件动态注入，不依赖 index.html 的结构调整。
  */
 (function () {
@@ -56,7 +56,7 @@
     + '.rb-flow b{color:var(--dim);font-weight:700;margin:0 2px}'
     + '.rb-none{font-size:12.5px;color:var(--faint);margin-top:10px}';
 
-  var es = null;
+  var streamController = null;
   var idx = 0;
   var pendingTimer = null;
   var doneStages = {};
@@ -268,20 +268,37 @@
     wrap.style.display = '';
   }
 
-  window.runStream = function () {
+  function dispatchSseEvent(raw) {
+    var event = 'message';
+    var data = [];
+    raw.split(/\r?\n/).forEach(function (line) {
+      if (line.indexOf('event:') === 0) event = line.slice(6).trim();
+      else if (line.indexOf('data:') === 0) data.push(line.slice(5).trimStart());
+    });
+    var payload = data.join('\n');
+    if (event === 'start') {
+      clearPendingTimer();
+      return;
+    }
+    if (event === 'step') {
+      clearPendingTimer();
+      try { appendStep(JSON.parse(payload)); } catch (err) {}
+      return;
+    }
+    if (event === 'done') {
+      clearPendingTimer();
+      try { renderDone(JSON.parse(payload)); } catch (err) {}
+      setBtn(false);
+      streamController = null;
+    }
+  }
+
+  window.runStream = async function () {
     ensureUi();
     var ta = $('streamInstr');
     var v = ta ? ta.value.trim() : '';
     if (!v) { if (ta) ta.focus(); return; }
-    if (!window.EventSource) {
-      var unsupported = $('streamEmpty');
-      if (unsupported) {
-        unsupported.style.display = '';
-        unsupported.textContent = '当前浏览器不支持实时事件流，请使用普通执行模式。';
-      }
-      return;
-    }
-    if (es) { try { es.close(); } catch (e) {} es = null; }
+    if (streamController) { try { streamController.abort(); } catch (e) {} streamController = null; }
     clearPendingTimer();
     idx = 0;
     resetPipe();
@@ -293,28 +310,42 @@
     if (empty) empty.style.display = 'none';
     setBtn(true);
 
-    es = new EventSource('/api/ops/chat/stream?instruction=' + encodeURIComponent(v));
+    streamController = new AbortController();
     pendingTimer = setTimeout(function () {
-      if (idx === 0 && es) {
-        try { es.close(); } catch (e) {}
-        es = null;
+      if (idx === 0 && streamController) {
+        try { streamController.abort(); } catch (e) {}
+        streamController = null;
         setBtn(false);
         var emptyEl = $('streamEmpty');
         if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = '服务暂未返回实时事件，请确认后端已启动。'; }
       }
     }, 2500);
-    es.addEventListener('start', function () { /* 已启动 */ });
-    es.addEventListener('step', function (e) {
-      clearPendingTimer();
-      try { appendStep(JSON.parse(e.data)); } catch (err) {}
-    });
-    es.addEventListener('done', function (e) {
-      clearPendingTimer();
-      try { renderDone(JSON.parse(e.data)); } catch (err) {}
+    try {
+      var r = await apiFetch('/api/ops/chat/stream?instruction=' + encodeURIComponent(v), {
+        signal: streamController.signal,
+        headers: { 'Accept': 'text/event-stream' }
+      });
+      if (!r.ok || !r.body) {
+        throw new Error('HTTP ' + r.status);
+      }
+      var reader = r.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        var parts = buffer.split(/\r?\n\r?\n/);
+        buffer = parts.pop() || '';
+        parts.forEach(function (part) {
+          if (part.trim()) dispatchSseEvent(part);
+        });
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) dispatchSseEvent(buffer);
       setBtn(false);
-      if (es) { es.close(); es = null; }
-    });
-    es.addEventListener('error', function (e) {
+      streamController = null;
+    } catch (e) {
       // 未收到任何阶段事件时，通常是后端未启动或流端点不可用。
       if (idx === 0) {
         var emptyEl = $('streamEmpty');
@@ -322,14 +353,14 @@
       }
       clearPendingTimer();
       setBtn(false);
-      if (es) { es.close(); es = null; }
-    });
+      streamController = null;
+    }
   };
 
   window.streamRollback = function (traceId) {
     var msg = $('streamRbMsg');
     if (msg) msg.textContent = '回滚中…';
-    fetch('/api/ops/rollback/' + encodeURIComponent(traceId), { method: 'POST' })
+    apiFetch('/api/ops/rollback/' + encodeURIComponent(traceId), { method: 'POST' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         var d = (j && j.data) || j || {};

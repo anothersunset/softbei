@@ -43,6 +43,8 @@ import java.util.function.Consumer;
  */
 @Service
 public class OpsPipeline {
+    private static final int MAX_PENDING_PLANS = 200;
+    private static final long PLAN_TTL_MS = 30 * 60 * 1000L;
     private final AgentRunner runner;
     private final PromptInjectionDetector injectionDetector;
     private final IntentRiskGuard guard;
@@ -97,6 +99,7 @@ public class OpsPipeline {
         ChatResponse resp = new ChatResponse();
 
         // 人工确认执行路径：复用缓存的计划，仅重跑感知+检索+校验+执行+分析
+        evictExpiredPlans();
         if (confirm && req.getTraceId() != null && planCache.containsKey(req.getTraceId())) {
             return runConfirmed(req.getTraceId(), resp, stepListener);
         }
@@ -200,7 +203,17 @@ public class OpsPipeline {
                     : "计划中含有需人工确认的受限变更指令，请确认后重试（confirm=true）。";
             // 缓存计划供后续确认
             if (resp.getPlan() != null) {
-                planCache.put(resp.getTraceId(), new CachedPlan(instruction, resp.getPlan()));
+                evictExpiredPlans();
+                if (planCache.size() >= MAX_PENDING_PLANS) {
+                    String oldest = planCache.entrySet().stream()
+                            .min(Map.Entry.comparingByValue((a, b) -> Long.compare(a.createdAtMs, b.createdAtMs)))
+                            .map(Map.Entry::getKey)
+                            .orElse(null);
+                    if (oldest != null) {
+                        planCache.remove(oldest);
+                    }
+                }
+                planCache.put(resp.getTraceId(), new CachedPlan(instruction, resp.getPlan(), System.currentTimeMillis()));
             }
         } else {
             status = "EXECUTED";
@@ -520,5 +533,10 @@ public class OpsPipeline {
         return out;
     }
 
-    private record CachedPlan(String instruction, PlanResult plan) {}
+    private void evictExpiredPlans() {
+        long cutoff = System.currentTimeMillis() - PLAN_TTL_MS;
+        planCache.entrySet().removeIf(entry -> entry.getValue().createdAtMs < cutoff);
+    }
+
+    private record CachedPlan(String instruction, PlanResult plan, long createdAtMs) {}
 }

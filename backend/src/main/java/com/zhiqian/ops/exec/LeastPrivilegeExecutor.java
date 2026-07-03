@@ -30,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class LeastPrivilegeExecutor {
     private static final Logger log = LoggerFactory.getLogger(LeastPrivilegeExecutor.class);
+    private static final String PRIVATE_KEY_REDACTION = "-----BEGIN PRIVATE KEY-----***";
+    private static final String PRIVATE_KEY_END = "-----END PRIVATE KEY-----";
     private final ExecProperties props;
     private final CircuitBreaker breaker;
     private final SensitiveDataSanitizer sanitizer;
@@ -118,13 +120,16 @@ public class LeastPrivilegeExecutor {
         ByteArrayOutputStream preview = new ByteArrayOutputStream(Math.min(previewLimit, 8192));
         long total = 0;
         boolean truncated = false;
+        boolean inPrivateKey = false;
         try {
             Files.createDirectories(auditPath.getParent());
             try (BufferedReader source = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
                  OutputStream audit = Files.newOutputStream(auditPath)) {
                 String line;
                 while ((line = source.readLine()) != null) {
-                    String sanitized = sanitizer == null ? line : sanitizer.sanitize(line);
+                    RedactedLine redacted = redactLine(line, inPrivateKey);
+                    inPrivateKey = redacted.inPrivateKey;
+                    String sanitized = sanitizer == null ? redacted.text : sanitizer.sanitize(redacted.text);
                     byte[] buf = (sanitized + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
                     audit.write(buf);
                     total += buf.length;
@@ -149,6 +154,24 @@ public class LeastPrivilegeExecutor {
         }
         return out;
     }
+
+    private RedactedLine redactLine(String line, boolean inPrivateKey) {
+        if (inPrivateKey) {
+            if (line.contains(PRIVATE_KEY_END)) {
+                return new RedactedLine(PRIVATE_KEY_END, false);
+            }
+            return new RedactedLine("", true);
+        }
+        if (line.matches(".*-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----.*")) {
+            boolean endsOnSameLine = line.matches(".*-----END (RSA |EC |OPENSSH )?PRIVATE KEY-----.*");
+            return new RedactedLine(
+                    endsOnSameLine ? PRIVATE_KEY_REDACTION + PRIVATE_KEY_END : PRIVATE_KEY_REDACTION,
+                    !endsOnSameLine);
+        }
+        return new RedactedLine(line, false);
+    }
+
+    private record RedactedLine(String text, boolean inPrivateKey) {}
 
     private static final class PathsSafe {
         private static Path outputPath(String dir, String execId, String streamName) {

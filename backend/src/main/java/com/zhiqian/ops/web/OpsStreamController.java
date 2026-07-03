@@ -17,11 +17,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import jakarta.annotation.PreDestroy;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 实时思维链(SSE)接口：以 Server-Sent Events 逐阶段推送安全护栏九阶段的执行过程，
@@ -40,7 +44,15 @@ public class OpsStreamController {
     private final SecurityScorer securityScorer = new SecurityScorer();
     private final CounterfactualAnalyzer counterfactual = new CounterfactualAnalyzer();
     private final RollbackAdvisor rollbackAdvisor = new RollbackAdvisor();
-    private final ExecutorService sseExecutor = Executors.newCachedThreadPool();
+    private final ExecutorService sseExecutor = new ThreadPoolExecutor(
+            4, 16, 60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(64),
+            r -> {
+                Thread t = new Thread(r, "ops-sse-worker");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy());
 
     public OpsStreamController(OpsPipeline pipeline, RollbackLedger rollbackLedger) {
         this.pipeline = pipeline;
@@ -57,31 +69,46 @@ public class OpsStreamController {
         req.setConfirm(confirm);
         req.setTraceId(traceId);
 
-        sseExecutor.submit(() -> {
-            try {
-                emitter.send(SseEmitter.event().name("start")
-                        .data(Map.of("instruction", instruction == null ? "" : instruction)));
-                ChatResponse resp = pipeline.chat(req, step -> {
-                    try {
-                        emitter.send(SseEmitter.event().name("step").data(stepView(step)));
-                    } catch (Exception ignore) {
-                        // 客户端断开等，忽略单步发送失败，后续由 done/error 收尾
-                    }
-                });
-                enrich(resp);
-                emitter.send(SseEmitter.event().name("done").data(resp));
-                emitter.complete();
-            } catch (Exception e) {
+        try {
+            sseExecutor.submit(() -> {
                 try {
-                    emitter.send(SseEmitter.event().name("error")
-                            .data(Map.of("message", e.getMessage() == null ? "执行失败" : e.getMessage())));
-                } catch (Exception ignore) {
-                    // 忽略
+                    emitter.send(SseEmitter.event().name("start")
+                            .data(Map.of("instruction", instruction == null ? "" : instruction)));
+                    ChatResponse resp = pipeline.chat(req, step -> {
+                        try {
+                            emitter.send(SseEmitter.event().name("step").data(stepView(step)));
+                        } catch (Exception ignore) {
+                            // 客户端断开等，忽略单步发送失败，后续由 done/error 收尾
+                        }
+                    });
+                    enrich(resp);
+                    emitter.send(SseEmitter.event().name("done").data(resp));
+                    emitter.complete();
+                } catch (Exception e) {
+                    try {
+                        emitter.send(SseEmitter.event().name("error")
+                                .data(Map.of("message", e.getMessage() == null ? "执行失败" : e.getMessage())));
+                    } catch (Exception ignore) {
+                        // 忽略
+                    }
+                    emitter.completeWithError(e);
                 }
-                emitter.completeWithError(e);
+            });
+        } catch (RejectedExecutionException e) {
+            try {
+                emitter.send(SseEmitter.event().name("error")
+                        .data(Map.of("message", "实时连接过多，请稍后重试")));
+            } catch (Exception ignored) {
+                // 忽略
             }
-        });
+            emitter.completeWithError(e);
+        }
         return emitter;
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        sseExecutor.shutdownNow();
     }
 
     /** 将单步思维链节点整理为前端友好的视图。 */
