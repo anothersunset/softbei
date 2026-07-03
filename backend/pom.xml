@@ -20,6 +20,8 @@
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- 默认排除 e2e 标记（需真实 API key）；覆盖：mvn test -DexcludedGroups= -->
+        <excludedGroups>e2e</excludedGroups>
     </properties>
 
     <dependencies>
@@ -107,6 +109,15 @@
                     <threads>2</threads>
                     <timeoutConst>5000</timeoutConst>
                     <timestampedReports>false</timestampedReports>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 默认排除 e2e 标记的测试（需真实 API key）-->
+                    <!-- 手动覆盖全部运行：mvn test -DexcludedGroups= -->
+                    <excludedGroups>${excludedGroups}</excludedGroups>
                 </configuration>
             </plugin>
         </plugins>

@@ -1,0 +1,15 @@
+# e2e 测试专用配置：接入真实 DeepSeek 模型
+# 使用 @ActiveProfiles("e2e") + @Tag("e2e") 标记，CI 中自动跳过
+server:
+  address: 127.0.0.1
+
+ops:
+  llm:
+    provider: deepseek
+    base-url: ${OPS_LLM_BASE_URL:https://api.deepseek.com}
+    model: ${OPS_LLM_MODEL:deepseek-chat}
+    api-key: ${OPS_LLM_API_KEY:}
+    timeout-seconds: 120
+  exec:
+    dry-run: true
+    use-sudo: false
