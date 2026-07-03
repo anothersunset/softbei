@@ -1,5 +1,7 @@
 package com.zhiqian.ops.agent;
 
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -14,6 +16,16 @@ import java.util.function.Consumer;
  */
 @Component
 public class AgentRunner {
+    private final SensitiveDataSanitizer sanitizer;
+
+    public AgentRunner() {
+        this(null);
+    }
+
+    @Autowired
+    public AgentRunner(SensitiveDataSanitizer sanitizer) {
+        this.sanitizer = sanitizer;
+    }
 
     public List<AgentStep> run(List<AgentNode> nodes, AgentContext ctx, Consumer<AgentStep> onStep) {
         List<AgentStep> steps = new ArrayList<>();
@@ -37,7 +49,7 @@ public class AgentRunner {
                     node.stage(),
                     node.agentName(),
                     new HashMap<>(),
-                    out,
+                    sanitizeMap(out),
                     str(out.get("_model")),
                     dbl(out.get("_confidence")),
                     elapsed,
@@ -57,6 +69,18 @@ public class AgentRunner {
     }
 
     private String str(Object o) { return o == null ? null : String.valueOf(o); }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> sanitizeMap(Map<String, Object> out) {
+        if (sanitizer == null || out == null) {
+            return out;
+        }
+        Object sanitized = sanitizer.sanitizeValue(out);
+        if (sanitized instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return out;
+    }
 
     private Double dbl(Object o) {
         if (o instanceof Number n) { return n.doubleValue(); }

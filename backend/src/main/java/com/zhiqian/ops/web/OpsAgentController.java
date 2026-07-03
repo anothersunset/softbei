@@ -7,6 +7,7 @@ import com.zhiqian.ops.exec.ExecResult;
 import com.zhiqian.ops.exec.LeastPrivilegeExecutor;
 import com.zhiqian.ops.exec.RollbackLedger;
 import com.zhiqian.ops.guard.CounterfactualAnalyzer;
+import com.zhiqian.ops.guard.IntentRiskGuard;
 import com.zhiqian.ops.guard.RiskDecision;
 import com.zhiqian.ops.guard.RiskLevel;
 import com.zhiqian.ops.guard.RollbackAdvisor;
@@ -44,15 +45,16 @@ public class OpsAgentController {
     private final ApiSecurityProperties apiSecurityProperties;
     private final Environment environment;
     private final SensitiveDataSanitizer sanitizer;
+    private final IntentRiskGuard guard;
     private final SecurityScorer securityScorer = new SecurityScorer();
     private final CounterfactualAnalyzer counterfactual = new CounterfactualAnalyzer();
     private final RollbackAdvisor rollbackAdvisor = new RollbackAdvisor();
 
     public OpsAgentController(OpsPipeline pipeline, List<AgentTool> tools,
                               RollbackLedger rollbackLedger, LeastPrivilegeExecutor executor,
-                              LlmClient llm, ExecProperties execProperties,
-                              ApiSecurityProperties apiSecurityProperties, Environment environment,
-                              SensitiveDataSanitizer sanitizer) {
+                               LlmClient llm, ExecProperties execProperties,
+                               ApiSecurityProperties apiSecurityProperties, Environment environment,
+                               SensitiveDataSanitizer sanitizer, IntentRiskGuard guard) {
         this.pipeline = pipeline;
         this.tools = tools;
         this.rollbackLedger = rollbackLedger;
@@ -62,6 +64,7 @@ public class OpsAgentController {
         this.apiSecurityProperties = apiSecurityProperties;
         this.environment = environment;
         this.sanitizer = sanitizer;
+        this.guard = guard;
     }
 
     @PostMapping("/chat")
@@ -139,7 +142,24 @@ public class OpsAgentController {
             Map<String, Object> r = new LinkedHashMap<>(item);
             Object comp = item.get("compensate");
             if (comp instanceof String c && !c.isBlank()) {
-                ExecResult er = executor.run(tokenize(c));
+                RiskDecision decision = guard.evaluate(c);
+                r.put("rollbackDecision", decision);
+                if (decision.level() == RiskLevel.BLOCK) {
+                    r.put("rolledBack", false);
+                    r.put("output", "补偿命令命中安全红线，已拒绝执行：" + decision.reason());
+                    results.add(r);
+                    continue;
+                }
+                if (decision.level().requiresApproval()) {
+                    r.put("rolledBack", false);
+                    r.put("requiresApproval", true);
+                    r.put("output", "补偿命令需人工确认，请通过主运维链路执行并保留影响记录：" + decision.reason());
+                    results.add(r);
+                    continue;
+                }
+                ExecResult er = decision.level() == RiskLevel.READONLY
+                        ? executor.runReadOnly(tokenize(c))
+                        : executor.run(tokenize(c));
                 r.put("rolledBack", true);
                 r.put("dryRun", er.dryRun());
                 r.put("exitCode", er.exitCode());

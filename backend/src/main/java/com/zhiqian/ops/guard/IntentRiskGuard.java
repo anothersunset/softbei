@@ -134,6 +134,13 @@ public class IntentRiskGuard {
             case "sed" -> evaluateSed(cmd, argv);
             case "tar" -> evaluateTar(cmd, argv);
             case "rsync" -> evaluateRsync(cmd, argv);
+            case "ip" -> evaluateIp(cmd, argv);
+            case "route" -> evaluateRoute(cmd, argv);
+            case "ifconfig" -> evaluateIfconfig(cmd, argv);
+            case "wmic" -> evaluateWmic(cmd, argv);
+            case "strace" -> evaluateStrace(cmd, argv);
+            case "taskkill" -> new RiskDecision(cmd, RiskLevel.EXECUTABLE,
+                    "taskkill 会终止 Windows 进程，需人工确认", "taskkillMutating");
             default -> null;
         };
     }
@@ -237,6 +244,60 @@ public class IntentRiskGuard {
         return touchesCriticalPath(argv)
                 ? new RiskDecision(cmd, RiskLevel.IRREVERSIBLE, "rsync 覆盖同步目标触及系统关键路径，需执行前备份", "criticalPath")
                 : new RiskDecision(cmd, RiskLevel.EXECUTABLE, "rsync 可能覆盖写入目标文件，需人工确认", "rsyncMutating");
+    }
+
+    private RiskDecision evaluateIp(String cmd, List<String> argv) {
+        String sub = firstNonOption(argv, 1);
+        if (sub == null) {
+            return new RiskDecision(cmd, RiskLevel.READONLY, "ip 帮助/概览查询", "ipReadOnly");
+        }
+        if (containsAny(argv, "add", "del", "delete", "set", "replace", "change", "flush")) {
+            return new RiskDecision(cmd, RiskLevel.EXECUTABLE, "ip 网络配置变更需人工确认", "ipMutatingSubcommand");
+        }
+        if (List.of("addr", "address", "a", "route", "r", "link", "l", "neigh", "neighbour", "neighbor", "n").contains(sub)) {
+            return new RiskDecision(cmd, RiskLevel.READONLY, "ip 网络状态查询子命令", "ipReadOnly");
+        }
+        return new RiskDecision(cmd, RiskLevel.EXECUTABLE, "未知 ip 子命令默认需人工确认", "ipUnknownSubcommand");
+    }
+
+    private RiskDecision evaluateRoute(String cmd, List<String> argv) {
+        if (containsAny(argv, "add", "del", "delete", "change", "flush")) {
+            return new RiskDecision(cmd, RiskLevel.EXECUTABLE, "route 路由表变更需人工确认", "routeMutatingSubcommand");
+        }
+        return new RiskDecision(cmd, RiskLevel.READONLY, "route 路由表查询", "routeReadOnly");
+    }
+
+    private RiskDecision evaluateIfconfig(String cmd, List<String> argv) {
+        if (containsAny(argv, "up", "down", "netmask", "broadcast", "mtu", "add", "del", "delete")) {
+            return new RiskDecision(cmd, RiskLevel.EXECUTABLE, "ifconfig 网卡配置变更需人工确认", "ifconfigMutatingOption");
+        }
+        return new RiskDecision(cmd, RiskLevel.READONLY, "ifconfig 网卡状态查询", "ifconfigReadOnly");
+    }
+
+    private RiskDecision evaluateWmic(String cmd, List<String> argv) {
+        if (containsAny(argv, "call", "create", "delete", "set")) {
+            return new RiskDecision(cmd, RiskLevel.EXECUTABLE, "wmic 调用/创建/删除/设置对象需人工确认", "wmicMutatingVerb");
+        }
+        return new RiskDecision(cmd, RiskLevel.READONLY, "wmic 查询类命令", "wmicReadOnly");
+    }
+
+    private RiskDecision evaluateStrace(String cmd, List<String> argv) {
+        if (containsAny(argv, "-V", "--version", "-h", "--help")) {
+            return new RiskDecision(cmd, RiskLevel.READONLY, "strace 帮助/版本查询", "straceReadOnly");
+        }
+        return new RiskDecision(cmd, RiskLevel.EXECUTABLE,
+                "strace 会启动或附加到进程并暴露调用细节，需人工确认", "straceAttachOrExecute");
+    }
+
+    private boolean containsAny(List<String> argv, String... values) {
+        for (String arg : argv) {
+            for (String value : values) {
+                if (arg.equalsIgnoreCase(value)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String firstNonOption(List<String> argv, int from) {

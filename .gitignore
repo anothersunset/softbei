@@ -18,6 +18,11 @@ logs/
 *.log
 ops-trace*.jsonl
 
+# Personal Notion sync artifacts
+NOTION-SYNC.md
+notion-*.sh
+notion-page-tmp.md
+
 # OS
 .DS_Store
 Thumbs.db

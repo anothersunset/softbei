@@ -1,6 +1,7 @@
 package com.zhiqian.ops.planner;
 
 import com.zhiqian.ops.guard.RiskDecision;
+import com.zhiqian.ops.guard.IntentRiskGuard;
 import com.zhiqian.ops.guard.RiskLevel;
 import com.zhiqian.ops.llm.PlanResult;
 import com.zhiqian.ops.llm.PlanStep;
@@ -21,10 +22,20 @@ import java.util.Set;
  * execution observations.
  */
 public class ExecutionPlanner {
+    private final IntentRiskGuard guard;
+
     private static final Set<String> READONLY_BINARIES = Set.of(
             "df", "du", "ps", "ss", "netstat", "journalctl", "tail", "cat",
             "uptime", "free", "lsof", "top", "vmstat", "iostat", "dmesg",
             "ls", "find", "grep", "awk", "sed");
+
+    public ExecutionPlanner() {
+        this(null);
+    }
+
+    public ExecutionPlanner(IntentRiskGuard guard) {
+        this.guard = guard;
+    }
 
     public OpsExecutionPlan build(String instruction, PlanResult plan, List<Evidence> evidence) {
         OpsExecutionPlan out = new OpsExecutionPlan();
@@ -166,6 +177,9 @@ public class ExecutionPlanner {
     }
 
     private boolean isProbablyReadOnly(String command) {
+        if (guard != null) {
+            return guard.evaluate(command).level() == RiskLevel.READONLY;
+        }
         String binary = firstToken(command).toLowerCase(Locale.ROOT);
         if (binary.isBlank()) return false;
         if ("sed".equals(binary)) {

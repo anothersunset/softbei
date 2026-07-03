@@ -39,6 +39,9 @@ function asText(v){if(v==null)return '';if(typeof v==='object')return JSON.strin
 function lvlClass(l){l=(l||'').toString().toUpperCase();if(l.indexOf('READONLY')>=0||l.indexOf('SAFE')>=0)return 'safe';if(l.indexOf('IRREVERSIBLE')>=0)return 'irreversible';if(l.indexOf('EXECUTABLE')>=0||l.indexOf('REVIEW')>=0)return 'review';if(l.indexOf('BLOCK')>=0)return 'block';return 'gray'}
 function rcaLvlClass(l){l=(l||'').toString().toUpperCase();if(l==='L3')return 'block';if(l==='L2')return 'review';if(l==='L1')return 'safe';return 'gray'}
 function kindClass(k){k=(k||'').toString().toLowerCase();if(k==='rule')return 'review';if(k==='history')return 'gray';return 'safe'}
+function opsToken(){try{return (localStorage.getItem('opsApiToken')||'').trim()}catch(e){return ''}}
+function authHeaders(extra){var h=Object.assign({},extra||{});var t=opsToken();if(t)h['X-Ops-Token']=t;return h}
+function apiFetch(url,opts){opts=opts||{};opts.headers=authHeaders(opts.headers);return fetch(url,opts)}
 function vt(fn){
   if(!document.startViewTransition){fn();return}
   try{
@@ -51,9 +54,18 @@ function vt(fn){
 (function init(){
   $('scen').innerHTML=SCENARIOS.map((s,i)=>'<button onclick="runScenario('+i+')"><span class="tag '+s.cls+'">'+s.t+'</span><span>'+esc(s.label)+'</span></button>').join('');
   renderPipe([],null);
+  bindTokenInput();
   loadHealth(); loadRuntime(); loadTools();
   bindShortcuts();
 })();
+function bindTokenInput(){
+  var token=$('apiToken');
+  if(!token)return;
+  token.value=opsToken();
+  token.addEventListener('input',function(){
+    try{localStorage.setItem('opsApiToken',token.value.trim())}catch(e){}
+  });
+}
 function bindShortcuts(){
   var main=$('instr');
   if(main){
@@ -111,7 +123,7 @@ function executionPlanHtml(ep){
 
 async function loadHealth(){
   try{
-    const r=await fetch('/actuator/health');const j=await r.json();
+    const r=await apiFetch('/actuator/health');const j=await r.json();
     if((j.status||'').toUpperCase()==='UP'){$('healthDot').className='dot on';$('healthTxt').textContent='服务正常'}
     else{$('healthTxt').textContent='服务异常'}
   }catch(e){$('healthTxt').textContent='服务未连接'}
@@ -120,7 +132,7 @@ async function loadRuntime(){
   var dot=$('runtimeDot'),txt=$('runtimeTxt');
   if(!dot||!txt)return;
   try{
-    const r=await fetch('/api/ops/runtime');const j=await r.json();
+    const r=await apiFetch('/api/ops/runtime');const j=await r.json();
     const d=(j&&j.data)?j.data:j;
     const mode=(pick(d,['llmMode'])||'UNKNOWN').toString().toUpperCase();
     const provider=pick(d,['llmProvider'])||'unknown';
@@ -135,7 +147,7 @@ async function loadRuntime(){
 }
 async function loadTools(){
   try{
-    const r=await fetch('/api/ops/tools');const j=await r.json();
+    const r=await apiFetch('/api/ops/tools');const j=await r.json();
     const arr=(j&&j.data)?j.data:(Array.isArray(j)?j:[]);
     $('tools').innerHTML=arr.length?arr.map(function(t){
       var nm=pick(t,['name'])||asText(t);
@@ -155,7 +167,7 @@ async function sendChat(confirm){
   try{
     const body={instruction:instruction};
     if(confirm&&lastTraceId){body.confirm=true;body.traceId=lastTraceId}
-    const r=await fetch('/api/ops/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r=await apiFetch('/api/ops/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const resp=await r.json();const d=(resp&&resp.data)?resp.data:resp;
     clearInterval(animTimer);$('loader').classList.remove('on');
     vt(function(){render(d)});
@@ -527,7 +539,7 @@ async function runInspect(){
   $('inspectEmpty').style.display='none';$('inspectBox').style.display='block';
   $('inspectBox').innerHTML='<div class="empty">巡检中…正在执行只读体检与跨源根因分析</div>';
   try{
-    const r=await fetch('/api/ops/rca',{method:'POST'});
+    const r=await apiFetch('/api/ops/rca',{method:'POST'});
     const resp=await r.json();const d=(resp&&resp.data)?resp.data:resp;
     const report=pick(d,['report'])||d;
     const rca=pick(d,['rca']);
@@ -610,7 +622,7 @@ async function runRedteam(){
     $('rtProg').textContent='对抗中… '+(i+1)+' / '+REDTEAM.length+'：'+c.label;
     var status='ERROR',msg='';
     try{
-      var r=await fetch('/api/ops/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction:c.text})});
+      var r=await apiFetch('/api/ops/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction:c.text})});
       var resp=await r.json();var d=(resp&&resp.data)?resp.data:resp;
       status=((pick(d,['status'])||'').toString().toUpperCase())||'UNKNOWN';
       msg=pick(d,['message'])||'';

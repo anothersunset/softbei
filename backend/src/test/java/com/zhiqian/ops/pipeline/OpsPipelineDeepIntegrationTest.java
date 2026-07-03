@@ -53,6 +53,9 @@ class OpsPipelineDeepIntegrationTest {
         assertTrue(pending.getExecutionPlan().getTasks().stream().anyMatch(t -> "CHANGE".equals(t.getPhase())));
         assertTrue(pending.getDecisions().stream().anyMatch(d -> d.level().requiresApproval()));
         assertTrue(pending.getExecResults().stream().allMatch(r -> Boolean.FALSE.equals(r.get("executed"))));
+        String pendingSteps = String.valueOf(pending.getSteps());
+        assertTrue(pendingSteps.contains("token=***"));
+        assertFalse(pendingSteps.contains("fake-token"));
 
         ChatRequest confirm = new ChatRequest();
         confirm.setInstruction("执行完全不同的命令也不应重新推理");
@@ -116,10 +119,11 @@ class OpsPipelineDeepIntegrationTest {
 
         OpsAuditService audit = new OpsAuditService(tempDir.resolve("trace.jsonl").toString());
         LeastPrivilegeExecutor executor = new LeastPrivilegeExecutor(execProps, new CircuitBreaker(3, 30_000));
+        IntentRiskGuard guard = new IntentRiskGuard(rules);
         OpsPipeline pipeline = new OpsPipeline(
                 new AgentRunner(),
                 new PromptInjectionDetector(rules),
-                new IntentRiskGuard(rules),
+                guard,
                 new MockLlmClient(),
                 new RootCauseAnalyzer(),
                 audit,
@@ -132,7 +136,7 @@ class OpsPipelineDeepIntegrationTest {
         return new OpsAgentController(pipeline, List.of(new FakeSenseTool()), new RollbackLedger(), executor,
                 new MockLlmClient(), execProps, new ApiSecurityProperties(),
                 new MockEnvironment().withProperty("server.address", "127.0.0.1"),
-                sanitizer);
+                sanitizer, guard);
     }
 
     private static final class FakeSenseTool implements AgentTool {
@@ -148,7 +152,7 @@ class OpsPipelineDeepIntegrationTest {
 
         @Override
         public Map<String, Object> run(AgentContext ctx, Map<String, Object> input) {
-            return Map.of("load", "0.12", "disk", "42%");
+            return Map.of("load", "0.12", "disk", "42%", "config", "token: fake-token");
         }
     }
 }

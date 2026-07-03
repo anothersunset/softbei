@@ -43,6 +43,8 @@ import java.util.function.Consumer;
  */
 @Service
 public class OpsPipeline {
+    private static final int MAX_PENDING_PLANS = 200;
+    private static final long PLAN_TTL_MS = 30 * 60 * 1000L;
     private final AgentRunner runner;
     private final PromptInjectionDetector injectionDetector;
     private final IntentRiskGuard guard;
@@ -54,7 +56,7 @@ public class OpsPipeline {
     private final ContextRetriever retriever;
     private final ExecProperties execProps;
     private final SensitiveDataSanitizer sanitizer;
-    private final ExecutionPlanner executionPlanner = new ExecutionPlanner();
+    private final ExecutionPlanner executionPlanner;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, CachedPlan> planCache = new ConcurrentHashMap<>();
 
@@ -80,6 +82,7 @@ public class OpsPipeline {
         this.retriever = retriever;
         this.execProps = execProps;
         this.sanitizer = sanitizer;
+        this.executionPlanner = new ExecutionPlanner(guard);
     }
 
     public ChatResponse chat(ChatRequest req) {
@@ -96,6 +99,7 @@ public class OpsPipeline {
         ChatResponse resp = new ChatResponse();
 
         // 人工确认执行路径：复用缓存的计划，仅重跑感知+检索+校验+执行+分析
+        evictExpiredPlans();
         if (confirm && req.getTraceId() != null && planCache.containsKey(req.getTraceId())) {
             return runConfirmed(req.getTraceId(), resp, stepListener);
         }
@@ -199,7 +203,17 @@ public class OpsPipeline {
                     : "计划中含有需人工确认的受限变更指令，请确认后重试（confirm=true）。";
             // 缓存计划供后续确认
             if (resp.getPlan() != null) {
-                planCache.put(resp.getTraceId(), new CachedPlan(instruction, resp.getPlan()));
+                evictExpiredPlans();
+                if (planCache.size() >= MAX_PENDING_PLANS) {
+                    String oldest = planCache.entrySet().stream()
+                            .min(Map.Entry.comparingByValue((a, b) -> Long.compare(a.createdAtMs, b.createdAtMs)))
+                            .map(Map.Entry::getKey)
+                            .orElse(null);
+                    if (oldest != null) {
+                        planCache.remove(oldest);
+                    }
+                }
+                planCache.put(resp.getTraceId(), new CachedPlan(instruction, resp.getPlan(), System.currentTimeMillis()));
             }
         } else {
             status = "EXECUTED";
@@ -249,9 +263,11 @@ public class OpsPipeline {
                 // 主动/动作类工具(如主动巡检)不在被动感知阶段自动执行，仅通过 MCP 或按需触发。
                 if (tool instanceof ActiveTool) continue;
                 try {
-                    sensed.put(tool.name(), tool.run(ctx, Map.of()));
+                    Object output = tool.run(ctx, Map.of());
+                    sensed.put(tool.name(), sanitizer == null ? output : sanitizer.sanitizeValue(output));
                 } catch (Exception e) {
-                    sensed.put(tool.name(), "感知失败：" + e.getMessage());
+                    String message = "感知失败：" + e.getMessage();
+                    sensed.put(tool.name(), sanitizer == null ? message : sanitizer.sanitize(message));
                 }
             }
             ctx.state().put("sensed", sensed);
@@ -517,5 +533,10 @@ public class OpsPipeline {
         return out;
     }
 
-    private record CachedPlan(String instruction, PlanResult plan) {}
+    private void evictExpiredPlans() {
+        long cutoff = System.currentTimeMillis() - PLAN_TTL_MS;
+        planCache.entrySet().removeIf(entry -> entry.getValue().createdAtMs < cutoff);
+    }
+
+    private record CachedPlan(String instruction, PlanResult plan, long createdAtMs) {}
 }

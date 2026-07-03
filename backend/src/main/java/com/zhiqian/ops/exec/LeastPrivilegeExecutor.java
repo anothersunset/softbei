@@ -1,12 +1,16 @@
 package com.zhiqian.ops.exec;
 
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,12 +30,21 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class LeastPrivilegeExecutor {
     private static final Logger log = LoggerFactory.getLogger(LeastPrivilegeExecutor.class);
+    private static final String PRIVATE_KEY_REDACTION = "-----BEGIN PRIVATE KEY-----***";
+    private static final String PRIVATE_KEY_END = "-----END PRIVATE KEY-----";
     private final ExecProperties props;
     private final CircuitBreaker breaker;
+    private final SensitiveDataSanitizer sanitizer;
 
     public LeastPrivilegeExecutor(ExecProperties props, CircuitBreaker breaker) {
+        this(props, breaker, null);
+    }
+
+    @Autowired
+    public LeastPrivilegeExecutor(ExecProperties props, CircuitBreaker breaker, SensitiveDataSanitizer sanitizer) {
         this.props = props;
         this.breaker = breaker;
+        this.sanitizer = sanitizer;
     }
 
     /** 执行只读/感知类命令（不受 dry-run 与熔断影响）。 */
@@ -107,18 +120,22 @@ public class LeastPrivilegeExecutor {
         ByteArrayOutputStream preview = new ByteArrayOutputStream(Math.min(previewLimit, 8192));
         long total = 0;
         boolean truncated = false;
+        boolean inPrivateKey = false;
         try {
             Files.createDirectories(auditPath.getParent());
-            try (InputStream source = in;
+            try (BufferedReader source = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
                  OutputStream audit = Files.newOutputStream(auditPath)) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = source.read(buf)) != -1) {
-                    audit.write(buf, 0, n);
-                    total += n;
+                String line;
+                while ((line = source.readLine()) != null) {
+                    RedactedLine redacted = redactLine(line, inPrivateKey);
+                    inPrivateKey = redacted.inPrivateKey;
+                    String sanitized = sanitizer == null ? redacted.text : sanitizer.sanitize(redacted.text);
+                    byte[] buf = (sanitized + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
+                    audit.write(buf);
+                    total += buf.length;
                     int remaining = previewLimit - preview.size();
                     if (remaining > 0) {
-                        preview.write(buf, 0, Math.min(remaining, n));
+                        preview.write(buf, 0, Math.min(remaining, buf.length));
                     }
                     if (preview.size() >= previewLimit && total > previewLimit) {
                         truncated = true;
@@ -137,6 +154,24 @@ public class LeastPrivilegeExecutor {
         }
         return out;
     }
+
+    private RedactedLine redactLine(String line, boolean inPrivateKey) {
+        if (inPrivateKey) {
+            if (line.contains(PRIVATE_KEY_END)) {
+                return new RedactedLine(PRIVATE_KEY_END, false);
+            }
+            return new RedactedLine("", true);
+        }
+        if (line.matches(".*-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----.*")) {
+            boolean endsOnSameLine = line.matches(".*-----END (RSA |EC |OPENSSH )?PRIVATE KEY-----.*");
+            return new RedactedLine(
+                    endsOnSameLine ? PRIVATE_KEY_REDACTION + PRIVATE_KEY_END : PRIVATE_KEY_REDACTION,
+                    !endsOnSameLine);
+        }
+        return new RedactedLine(line, false);
+    }
+
+    private record RedactedLine(String text, boolean inPrivateKey) {}
 
     private static final class PathsSafe {
         private static Path outputPath(String dir, String execId, String streamName) {

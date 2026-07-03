@@ -8,8 +8,10 @@ guard:
       reason: "Fork 炸弹"
     - pattern: "(^|\\s)mkfs(\\.|\\s)"
       reason: "格式化文件系统"
-    - pattern: "(^|\\s)dd\\s+.*of=/dev/"
+    - pattern: "(^|\\s)dd\\s+.*of=/(dev|etc|proc|sys)/"
       reason: "直写块设备，可覆盖磁盘"
+    - pattern: "(^|\\s)kill\\s+(-9|-KILL|-SIGKILL|--signal\\s+(KILL|9)|-s\\s+(KILL|9))\\s+1\\b"
+      reason: "对 PID 1 发送 SIGKILL，可导致系统或容器不可恢复"
     - pattern: "(^|\\s)(shutdown|reboot|halt|poweroff|init\\s+0)\\b"
       reason: "系统关机/重启"
     - pattern: ">\\s*/etc/(passwd|shadow|fstab|sudoers)"
@@ -87,11 +89,14 @@ guard:
     - umount
     - truncate
     - tee
+    - dd
     - iptables
     - nft
     - useradd
     - userdel
     - passwd
+    - taskkill
+    - strace
 
   # 只读/感知类白名单：READONLY
   readOnlyBinaries:
@@ -122,6 +127,10 @@ guard:
     - whoami
     - id
     - dmesg
+    - ping
+    - which
+    - tasklist
+    - dir
 
   # 提示词注入 / 高危恶意意图识别模式（中英文，大小写不敏感）
   injectionPatterns:
@@ -129,11 +138,21 @@ guard:
     - "disregard\\s+(all\\s+)?(previous|above|prior)"
     - "forget\\s+(all\\s+)?(previous|your)\\s+(instructions|rules)"
     - "you\\s+are\\s+now\\s+(a|an|in)"
+    - "from\\s+now\\s+on\\s+you\\s+are\\s+(a|an)\\b.{0,40}(no\\s+restrictions|unrestricted|hacker|root|admin)"
     - "(reveal|print|show)\\s+(your\\s+)?(system\\s+prompt|instructions)"
     - "developer\\s+mode"
+    - "debug\\s+mode"
+    - "(以前|前|上記).{0,8}(指示|命令|ルール).{0,12}(無視|破棄|忘れ)"
+    - "(이전|앞선|위의).{0,10}(지시|명령|규칙).{0,12}(무시|잊어|폐기)"
     - "\\boverride\\b.{0,30}(safety|security|guardrails|constraints|rules|validation|safeguards|checks|controls)"
     - "\\bbypass\\b.{0,30}(safety|security|guardrails|constraints|rules|validation|safeguards|checks|controls)"
     - "\\bdisable\\b.{0,20}(safety|security|guardrails|checks|validation|safeguards|controls)"
+    - "\\b(skip|ignore)\\b.{0,30}(approval|confirmation|validation|checks|controls|safeguards)"
+    - "\\bcode\\s*review\\b.{0,50}(ignore|bypass|disable|skip|override).{0,30}(safety|security|guardrails|rules|validation|checks)"
+    - "\\bCISO\\b.{0,50}(override|bypass|disable|skip|ignore).{0,30}(safety|security|approval|guardrails|controls)"
+    - "\\b(disaster\\s+recovery|dr\\s+drill|incident\\s+drill|emergency\\s+recovery)\\b.{0,50}(skip|bypass|disable|ignore|override).{0,30}(safety|security|approval|checks|validation|guardrails)"
+    - "\\b(urgent|emergency|sev-?1|p0)\\b.{0,50}(skip|bypass|disable|ignore).{0,30}(safety|security|approval|checks|validation|guardrails)"
+    - "(安全审计|应急|灾备|故障演练|灾难恢复|领导要求|首席信息安全官|CISO).{0,40}(显示|泄露|跳过|绕过|关闭|禁用|忽略).{0,30}(系统提示|安全|确认|校验|护栏|审批)"
     - "(\\u5b89\\u5168|\\u62a4\\u680f|\\u9650\\u5236|\\u6821\\u9a8c).{0,10}(\\u5173\\u6389|\\u5173\\u95ed|\\u7981\\u7528|\\u7ed5\\u8fc7)"
     - "忽略.*(之前|上述|以上|前面).*(指令|提示|规则|设定)"
     - "忽视.*(安全|护栏|限制|校验)"

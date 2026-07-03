@@ -26,11 +26,15 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedOriginPatterns("*")
                 .allowedMethods("POST", "OPTIONS")
                 .allowedHeaders("*");
+        registry.addMapping("/actuator/**")
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "OPTIONS")
+                .allowedHeaders("*");
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(apiTokenInterceptor)
-                .addPathPatterns("/api/**", "/mcp/**");
+                .addPathPatterns("/api/**", "/mcp/**", "/actuator/**");
     }
 }

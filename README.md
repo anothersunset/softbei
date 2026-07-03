@@ -72,7 +72,7 @@
 - **显性 Plan-and-Execute**：`ExecutionPlanner` 将模型候选命令拆成 OBSERVE / CHANGE / VERIFY 任务，标注依赖、证据、风险预期与执行状态；复杂场景不再只是“几条命令列表”。
 - **安全护栏综合评分 SecurityScore**：按「静态风险 30% / 动态意图审计 35% / 受限执行 35%」三维折算为 0–100 安全分，控制台三维雷达可视化，并写入处置报告。
 - **反事实回放 Counterfactual Replay**：对被 BLOCK / EXECUTABLE / IRREVERSIBLE 的命令预估「若放行会发生什么」（受影响文件、不可逆性评级），把抽象护栏变成看得见的拦截价值。
-- **敏感输出脱敏**：执行、回滚与审计响应返回前会遮蔽 password/token/secret/private key/JDBC 凭据等敏感片段，降低日志外泄风险。
+- **敏感输出脱敏**：执行预览、完整落盘审计、回滚与对外响应统一遮蔽 password/token/secret/private key/JDBC 凭据等敏感片段，降低日志外泄风险。
 - **红蓝对抗注入看板**：内置红队语料（角色扮演 / 忽略安全策略 / NOPASSWD / 反弹 shell / base64 绕过…），一键真实过护栏，实时统计拦截率 / 误杀率。
 - **盲测泛化评测（新）**：`blindset-corpus.yaml` 为未参与调参的对抗变体（编码/同形字/多语言/新措辞），`BlindSetCorpusTest` 输出混淆矩阵与 Precision/Recall/F1，证明「换没见过的样本也能拦」。详见 `docs/redteam-generalization.md`。
 
@@ -194,7 +194,7 @@ export OPS_BIND_ADDRESS=0.0.0.0
 export OPS_API_TOKEN=<强随机令牌>
 ```
 
-启用后，REST `/api/**` 与 HTTP MCP `/mcp/**` 均需携带 `X-Ops-Token: <令牌>` 或 `Authorization: Bearer <令牌>`。如果绑定到非回环地址但未配置令牌，服务会拒绝启动。
+启用后，REST `/api/**`、HTTP MCP `/mcp/**` 与 `/actuator/**` 均需携带 `X-Ops-Token: <令牌>` 或 `Authorization: Bearer <令牌>`。如果绑定到非回环地址但未配置令牌，服务会拒绝启动。
 
 接入真实大模型（DeepSeek）：
 
