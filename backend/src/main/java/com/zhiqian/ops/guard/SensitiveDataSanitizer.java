@@ -3,7 +3,9 @@ package com.zhiqian.ops.guard;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -36,6 +38,28 @@ public class SensitiveDataSanitizer {
             out = rule.pattern.matcher(out).replaceAll(rule.replacement);
         }
         return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    public Object sanitizeValue(Object value) {
+        if (value instanceof String s) {
+            return sanitize(s);
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                out.put(String.valueOf(entry.getKey()), sanitizeValue(entry.getValue()));
+            }
+            return out;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> out = new ArrayList<>();
+            for (Object item : list) {
+                out.add(sanitizeValue(item));
+            }
+            return out;
+        }
+        return value;
     }
 
     private record Rule(Pattern pattern, String replacement) {}

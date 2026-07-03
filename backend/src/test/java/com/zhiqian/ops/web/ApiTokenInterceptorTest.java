@@ -32,4 +32,21 @@ class ApiTokenInterceptorTest {
         accepted.addHeader("X-Ops-Token", "secret");
         assertTrue(interceptor.preHandle(accepted, new MockHttpServletResponse(), new Object()));
     }
+
+    @Test
+    void enabled_token_protects_actuator_paths_too() throws Exception {
+        ApiSecurityProperties props = new ApiSecurityProperties();
+        props.setApiToken("secret");
+        ApiTokenInterceptor interceptor = new ApiTokenInterceptor(props);
+
+        MockHttpServletResponse rejected = new MockHttpServletResponse();
+        boolean allowed = interceptor.preHandle(new MockHttpServletRequest("GET", "/actuator/prometheus"),
+                rejected, new Object());
+        assertFalse(allowed);
+        assertEquals(401, rejected.getStatus());
+
+        MockHttpServletRequest accepted = new MockHttpServletRequest("GET", "/actuator/health");
+        accepted.addHeader("Authorization", "Bearer secret");
+        assertTrue(interceptor.preHandle(accepted, new MockHttpServletResponse(), new Object()));
+    }
 }

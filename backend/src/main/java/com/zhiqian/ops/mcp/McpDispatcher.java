@@ -4,6 +4,8 @@ import com.zhiqian.ops.agent.AgentContext;
 import com.zhiqian.ops.agent.AgentTool;
 import com.zhiqian.ops.agent.ToolRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -37,10 +39,17 @@ public class McpDispatcher {
     public static final int INTERNAL_ERROR = -32603;
 
     private final ToolRegistry registry;
+    private final SensitiveDataSanitizer sanitizer;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public McpDispatcher(ToolRegistry registry) {
+        this(registry, null);
+    }
+
+    @Autowired
+    public McpDispatcher(ToolRegistry registry, SensitiveDataSanitizer sanitizer) {
         this.registry = registry;
+        this.sanitizer = sanitizer;
     }
 
     /**
@@ -151,17 +160,19 @@ public class McpDispatcher {
         // 工具执行错误按 MCP 约定以 isError 结果返回，而非 JSON-RPC 协议级错误。
         try {
             Map<String, Object> output = tool.run(new AgentContext(0L, 0L), arguments);
-            String text = mapper.writeValueAsString(output);
+            Object sanitizedOutput = sanitizer == null ? output : sanitizer.sanitizeValue(output);
+            String text = mapper.writeValueAsString(sanitizedOutput);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("content", List.of(Map.of("type", "text", "text", text)));
-            result.put("structuredContent", output);
+            result.put("structuredContent", sanitizedOutput);
             result.put("isError", false);
             return result;
         } catch (Exception e) {
+            String message = sanitizer == null ? e.getMessage() : sanitizer.sanitize(e.getMessage());
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("content", List.of(Map.of(
                     "type", "text",
-                    "text", "工具执行失败：" + e.getMessage())));
+                    "text", "工具执行失败：" + message)));
             result.put("isError", true);
             return result;
         }

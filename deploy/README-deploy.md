@@ -29,7 +29,7 @@ export OPS_BIND_ADDRESS=0.0.0.0
 export OPS_API_TOKEN=<强随机令牌>
 ```
 
-启用后调用 `/api/**` 与 `/mcp/**` 必须携带：
+启用后调用 `/api/**`、`/mcp/**` 与 `/actuator/**` 必须携带：
 
 ```http
 X-Ops-Token: <强随机令牌>

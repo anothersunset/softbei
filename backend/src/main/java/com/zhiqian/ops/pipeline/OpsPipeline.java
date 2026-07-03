@@ -54,7 +54,7 @@ public class OpsPipeline {
     private final ContextRetriever retriever;
     private final ExecProperties execProps;
     private final SensitiveDataSanitizer sanitizer;
-    private final ExecutionPlanner executionPlanner = new ExecutionPlanner();
+    private final ExecutionPlanner executionPlanner;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, CachedPlan> planCache = new ConcurrentHashMap<>();
 
@@ -80,6 +80,7 @@ public class OpsPipeline {
         this.retriever = retriever;
         this.execProps = execProps;
         this.sanitizer = sanitizer;
+        this.executionPlanner = new ExecutionPlanner(guard);
     }
 
     public ChatResponse chat(ChatRequest req) {
@@ -249,9 +250,11 @@ public class OpsPipeline {
                 // 主动/动作类工具(如主动巡检)不在被动感知阶段自动执行，仅通过 MCP 或按需触发。
                 if (tool instanceof ActiveTool) continue;
                 try {
-                    sensed.put(tool.name(), tool.run(ctx, Map.of()));
+                    Object output = tool.run(ctx, Map.of());
+                    sensed.put(tool.name(), sanitizer == null ? output : sanitizer.sanitizeValue(output));
                 } catch (Exception e) {
-                    sensed.put(tool.name(), "感知失败：" + e.getMessage());
+                    String message = "感知失败：" + e.getMessage();
+                    sensed.put(tool.name(), sanitizer == null ? message : sanitizer.sanitize(message));
                 }
             }
             ctx.state().put("sensed", sensed);

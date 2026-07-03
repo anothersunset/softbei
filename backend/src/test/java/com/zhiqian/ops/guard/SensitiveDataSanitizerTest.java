@@ -2,6 +2,9 @@ package com.zhiqian.ops.guard;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -23,5 +26,20 @@ class SensitiveDataSanitizerTest {
         assertFalse(out.contains("plain-text"));
         assertFalse(out.contains("abcdef"));
         assertFalse(out.contains("root:secret"));
+    }
+
+    @Test
+    void recursively_masks_nested_tool_outputs() throws Exception {
+        SensitiveDataSanitizer sanitizer = new SensitiveDataSanitizer(new RiskRuleLoader());
+
+        Object out = sanitizer.sanitizeValue(Map.of(
+                "stdout", "password=plain-text",
+                "nested", List.of(Map.of("stderr", "token: abcdef"))));
+        String rendered = String.valueOf(out);
+
+        assertTrue(rendered.contains("password=***"));
+        assertTrue(rendered.contains("token=***"));
+        assertFalse(rendered.contains("plain-text"));
+        assertFalse(rendered.contains("abcdef"));
     }
 }

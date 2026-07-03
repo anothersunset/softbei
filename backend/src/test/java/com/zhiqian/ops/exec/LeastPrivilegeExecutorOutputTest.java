@@ -2,11 +2,14 @@ package com.zhiqian.ops.exec;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import com.zhiqian.ops.guard.RiskRuleLoader;
+import com.zhiqian.ops.guard.SensitiveDataSanitizer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LeastPrivilegeExecutorOutputTest {
@@ -68,6 +71,44 @@ class LeastPrivilegeExecutorOutputTest {
                 .orElseThrow();
         assertTrue(Files.readString(stdoutAudit).contains("OUT-899"));
         assertTrue(Files.readString(stderrAudit).contains("ERR-899"));
+    }
+
+    @Test
+    void audit_files_are_sanitized_before_being_written_to_disk() throws Exception {
+        ExecProperties props = new ExecProperties();
+        props.setDryRun(false);
+        props.setUseSudo(false);
+        props.setWorkingDir(".");
+        props.setTimeoutSeconds(10);
+        props.setOutputAuditDir(tempDir.toString());
+        SensitiveDataSanitizer sanitizer = new SensitiveDataSanitizer(new RiskRuleLoader());
+        LeastPrivilegeExecutor executor = new LeastPrivilegeExecutor(props, new CircuitBreaker(3, 1000), sanitizer);
+
+        String javaBin = Path.of(System.getProperty("java.home"), "bin", windows() ? "java.exe" : "java").toString();
+        String classPath = Path.of("target", "test-classes")
+                + System.getProperty("path.separator")
+                + Path.of("target", "classes");
+        ExecResult result = executor.runReadOnly(List.of(
+                javaBin, "-cp", classPath, SecretEchoMain.class.getName()));
+
+        assertTrue(result.success(), () -> "stdout=" + result.stdout() + "\nstderr=" + result.stderr());
+        assertTrue(result.stdout().contains("password=***"));
+        assertFalse(result.stdout().contains("plain-secret"));
+        assertFalse(result.stderr().contains("stderr-token"));
+
+        String allAudit = Files.list(tempDir)
+                .map(p -> {
+                    try {
+                        return Files.readString(p);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .reduce("", String::concat);
+        assertTrue(allAudit.contains("password=***"));
+        assertTrue(allAudit.contains("token=***"));
+        assertFalse(allAudit.contains("plain-secret"));
+        assertFalse(allAudit.contains("stderr-token"));
     }
 
     private boolean windows() {

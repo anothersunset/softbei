@@ -53,6 +53,9 @@ class OpsPipelineDeepIntegrationTest {
         assertTrue(pending.getExecutionPlan().getTasks().stream().anyMatch(t -> "CHANGE".equals(t.getPhase())));
         assertTrue(pending.getDecisions().stream().anyMatch(d -> d.level().requiresApproval()));
         assertTrue(pending.getExecResults().stream().allMatch(r -> Boolean.FALSE.equals(r.get("executed"))));
+        String pendingSteps = String.valueOf(pending.getSteps());
+        assertTrue(pendingSteps.contains("token=***"));
+        assertFalse(pendingSteps.contains("fake-token"));
 
         ChatRequest confirm = new ChatRequest();
         confirm.setInstruction("执行完全不同的命令也不应重新推理");
@@ -148,7 +151,7 @@ class OpsPipelineDeepIntegrationTest {
 
         @Override
         public Map<String, Object> run(AgentContext ctx, Map<String, Object> input) {
-            return Map.of("load", "0.12", "disk", "42%");
+            return Map.of("load", "0.12", "disk", "42%", "config", "token: fake-token");
         }
     }
 }
