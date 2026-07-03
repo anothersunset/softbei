@@ -10,8 +10,8 @@ import com.zhiqian.ops.retriever.Evidence;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -24,17 +24,8 @@ import java.util.Set;
 public class ExecutionPlanner {
     private final IntentRiskGuard guard;
 
-    private static final Set<String> READONLY_BINARIES = Set.of(
-            "df", "du", "ps", "ss", "netstat", "journalctl", "tail", "cat",
-            "uptime", "free", "lsof", "top", "vmstat", "iostat", "dmesg",
-            "ls", "find", "grep", "awk", "sed");
-
-    public ExecutionPlanner() {
-        this(null);
-    }
-
     public ExecutionPlanner(IntentRiskGuard guard) {
-        this.guard = guard;
+        this.guard = Objects.requireNonNull(guard, "IntentRiskGuard is required for planner risk classification");
     }
 
     public OpsExecutionPlan build(String instruction, PlanResult plan, List<Evidence> evidence) {
@@ -177,27 +168,7 @@ public class ExecutionPlanner {
     }
 
     private boolean isProbablyReadOnly(String command) {
-        if (guard != null) {
-            return guard.evaluate(command).level() == RiskLevel.READONLY;
-        }
-        String binary = firstToken(command).toLowerCase(Locale.ROOT);
-        if (binary.isBlank()) return false;
-        if ("sed".equals(binary)) {
-            String lc = command.toLowerCase(Locale.ROOT);
-            return !lc.contains(" -i") && !lc.contains("--in-place");
-        }
-        if ("find".equals(binary)) {
-            String lc = command.toLowerCase(Locale.ROOT);
-            return !lc.contains("-delete") && !lc.contains("-exec");
-        }
-        return READONLY_BINARIES.contains(binary);
-    }
-
-    private String firstToken(String command) {
-        String s = safe(command).trim();
-        if (s.isEmpty()) return "";
-        int idx = s.indexOf(' ');
-        return idx < 0 ? s : s.substring(0, idx);
+        return guard.evaluate(command).level() == RiskLevel.READONLY;
     }
 
     private String safe(String s) {
