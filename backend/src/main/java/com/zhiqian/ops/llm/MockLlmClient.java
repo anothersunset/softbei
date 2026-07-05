@@ -33,6 +33,7 @@ public class MockLlmClient implements LlmClient {
 
         String explicit = detectExplicitCommand(instruction);
         String criticalDelete = detectCriticalDelete(instruction);
+        String pipeCommand = detectPipeCommand(instruction);
 
         if (criticalDelete != null) {
             // 演示误删关键数据目录 -> 预期被护栏 BLOCK
@@ -40,6 +41,13 @@ public class MockLlmClient implements LlmClient {
             r.setSummary("检测到针对关键路径的删除意图，已生成计划交由安全护栏校验");
             r.setRootCauseHypothesis("用户显式要求删除关键路径");
             r.setConfidence(0.4);
+        } else if (pipeCommand != null) {
+            // 显式管道命令原样回显，交由护栏做分段裁决（ps|grep 放行 / |tee 需确认 / |sh 红线）。
+            // 关键：不回显则护栏看不到管道命令，会误判为安全默认计划 -> 演示/验收失真。
+            steps.add(new PlanStep(pipeCommand, "用户直接下达的管道命令"));
+            r.setSummary("检测到显式管道命令，已交由安全护栏分段裁决");
+            r.setRootCauseHypothesis("用户显式指定管道操作");
+            r.setConfidence(0.5);
         } else if (explicit != null) {
             steps.add(new PlanStep(explicit, "用户直接下达的运维指令"));
             r.setSummary("检测到显式运维指令，已交由安全护栏校验");
@@ -102,6 +110,21 @@ public class MockLlmClient implements LlmClient {
         Matcher m = EXPLICIT_CMD.matcher(instruction);
         if (m.find()) {
             return m.group().trim();
+        }
+        return null;
+    }
+
+    /**
+     * 检测用户显式下达的 shell 管道命令并原样回显，供护栏分段裁决。
+     * 仅当剥离「执行/运行/run」前缀后仍含单个管道 {@code |}（非 {@code ||}）且以命令样式开头时触发，
+     * 避免把「执行一次健康体检」这类自然语言误当成命令。
+     */
+    private String detectPipeCommand(String instruction) {
+        if (instruction == null) return null;
+        String s = instruction.replaceAll("^\\s*(请)?(帮我)?(执行|运行|run)\\s*[:：]?\\s*", "").trim();
+        boolean hasPipe = s.contains("|") && !s.contains("||");
+        if (hasPipe && s.matches("^[A-Za-z/][\\w./-]*\\s.*")) {
+            return s;
         }
         return null;
     }

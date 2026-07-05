@@ -50,6 +50,18 @@ public class HealthInspectTool implements ActiveTool {
             fs.add(m);
         }
         out.put("findings", fs);
+        List<Map<String, Object>> preds = new ArrayList<>();
+        for (TrendPrediction p : report.predictions()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("metric", p.metric());
+            m.put("currentPercent", p.currentPercent());
+            m.put("ratePerHour", p.ratePerHour());
+            m.put("severity", p.severity());
+            m.put("projection", p.projection());
+            m.put("basis", p.basis());
+            preds.add(m);
+        }
+        out.put("predictions", preds);
         out.put("sources", report.sources());
         out.put("elapsedMs", report.elapsedMs());
         return out;

@@ -308,6 +308,32 @@ public class MockitoCoverageTest {
         }
 
         @Test
+        void rcaFallsBackWhenRealLlmSummaryIsEmpty() {
+            InspectionService svc = mock(InspectionService.class);
+            CrossSourceRca rca = mock(CrossSourceRca.class);
+            RcaLlmSummarizer summarizer = mock(RcaLlmSummarizer.class);
+            InspectionController ctrl = new InspectionController(svc, rca, summarizer);
+
+            InspectionReport report = new InspectionReport(
+                    "id3b", "t3b", "2026-01-01T00:00:00Z",
+                    55, "CRITICAL", "crit", List.of(), List.of(), List.of(), 300);
+            RcaResult rcaResult = new RcaResult("id3b", "t3b", "L2", "summary", List.of());
+            when(svc.inspect()).thenReturn(report);
+            when(rca.analyze(report)).thenReturn(rcaResult);
+            when(summarizer.enabled()).thenReturn(true);
+            when(summarizer.summarize(report, rcaResult)).thenReturn(null);
+            when(summarizer.providerName()).thenReturn("deepseek");
+
+            Result<Map<String, Object>> result = ctrl.rcaGet();
+            Map<String, Object> data = result.getData();
+            assertEquals(0, result.getCode());
+            assertTrue((Boolean) data.get("llmEnabled"));
+            assertEquals("deepseek", data.get("llmProvider"));
+            assertEquals(true, data.get("llmSummaryDegraded"));
+            assertTrue(String.valueOf(data.get("llmSummary")).length() > 0);
+        }
+
+        @Test
         void rcaWithoutLlmSummary() {
             InspectionService svc = mock(InspectionService.class);
             CrossSourceRca rca = mock(CrossSourceRca.class);

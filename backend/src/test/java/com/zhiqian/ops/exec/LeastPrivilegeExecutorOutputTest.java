@@ -40,6 +40,31 @@ class LeastPrivilegeExecutorOutputTest {
     }
 
     @Test
+    void readonly_pipeline_connects_stdout_to_next_stage_without_shell_parsing() {
+        ExecProperties props = new ExecProperties();
+        props.setDryRun(false);
+        props.setUseSudo(false);
+        props.setWorkingDir(".");
+        props.setTimeoutSeconds(10);
+        props.setOutputAuditDir(tempDir.toString());
+        LeastPrivilegeExecutor executor = new LeastPrivilegeExecutor(props, new CircuitBreaker(3, 1000));
+
+        String javaBin = Path.of(System.getProperty("java.home"), "bin", windows() ? "java.exe" : "java").toString();
+        String classPath = Path.of("target", "test-classes")
+                + System.getProperty("path.separator")
+                + Path.of("target", "classes");
+        ExecResult result = executor.runReadOnlyPipeline(List.of(
+                List.of(javaBin, "-cp", classPath, ExecutorFloodMain.class.getName(), "50"),
+                List.of(javaBin, "-cp", classPath, LineFilterMain.class.getName(), "OUT-42")));
+
+        assertTrue(result.success(), () -> "stdout=" + result.stdout() + "\nstderr=" + result.stderr());
+        assertTrue(result.stdout().contains("OUT-42"));
+        assertFalse(result.stdout().contains("OUT-41"));
+        assertFalse(result.stdout().contains("OUT-43"));
+        assertTrue(result.stderr().contains("[pipe-stage-1]"));
+    }
+
+    @Test
     void caps_in_memory_preview_while_full_output_is_written_to_audit_file() throws Exception {
         ExecProperties props = new ExecProperties();
         props.setDryRun(false);

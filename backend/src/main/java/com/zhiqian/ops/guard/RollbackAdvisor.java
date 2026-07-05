@@ -90,8 +90,9 @@ public class RollbackAdvisor {
                 continue;
             }
             boolean executed = false;
-            if (execResults != null && i < execResults.size()) {
-                executed = Boolean.TRUE.equals(execResults.get(i).get("executed"));
+            Map<String, Object> er = execResults != null && i < execResults.size() ? execResults.get(i) : null;
+            if (er != null) {
+                executed = Boolean.TRUE.equals(er.get("executed"));
             }
             if (!executed) {
                 continue;
@@ -100,8 +101,32 @@ public class RollbackAdvisor {
             if (adv != null) {
                 ledger.add(adv);
             }
+            ledger.addAll(restoreEntries(d.command(), er));
         }
         return ledger;
+    }
+
+    /** 执行前自动备份存在时，为每个备份文件生成「从备份恢复」补偿指令（可一键回放）。 */
+    private List<Map<String, Object>> restoreEntries(String command, Map<String, Object> er) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        Object pb = er == null ? null : er.get("preBackup");
+        if (!(pb instanceof List<?> list)) {
+            return out;
+        }
+        for (Object o : list) {
+            if (!(o instanceof Map<?, ?> record)) continue;
+            Object origin = record.get("origin");
+            Object backup = record.get("backup");
+            if (origin == null || backup == null) continue;
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("origin", command);
+            r.put("action", "restore-backup");
+            r.put("reversible", true);
+            r.put("compensate", "cp " + backup + " " + origin);
+            r.put("note", "从执行前自动备份恢复原文件（备份：" + backup + "）");
+            out.add(r);
+        }
+        return out;
     }
 
     private String baseName(String bin) {

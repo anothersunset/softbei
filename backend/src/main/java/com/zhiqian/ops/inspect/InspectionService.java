@@ -25,9 +25,15 @@ import java.util.UUID;
  */
 @Service
 public class InspectionService {
+    /** 采样历史上限：24h × 5min 间隔 = 288 个点。 */
+    private static final int MAX_SAMPLES = 288;
+    private static final long SAMPLE_TTL_MS = 24 * 60 * 60 * 1000L;
+
     private final LeastPrivilegeExecutor executor;
     private final InspectionProperties props;
     private final OpsAuditService audit;
+    /** 预测性感知：本进程内的巡检采样历史（磁盘/内存使用率）。 */
+    private final java.util.Deque<Sample> history = new java.util.concurrent.ConcurrentLinkedDeque<>();
 
     public InspectionService(LeastPrivilegeExecutor executor, InspectionProperties props, OpsAuditService audit) {
         this.executor = executor;
@@ -42,9 +48,10 @@ public class InspectionService {
 
         List<InspectionFinding> findings = new ArrayList<>();
         List<String> sources = new ArrayList<>();
+        Metrics metrics = new Metrics();
 
-        findings.add(checkDisk(sources));
-        findings.add(checkMemory(sources));
+        findings.add(checkDisk(sources, metrics));
+        findings.add(checkMemory(sources, metrics));
         findings.add(checkLoad(sources));
         findings.add(checkZombie(sources));
         findings.add(checkPorts(sources));
@@ -52,14 +59,18 @@ public class InspectionService {
         List<LogEvent> logEvents = collectLogEvents(sources);
         findings.add(checkLogErrors(logEvents));
 
+        recordSample(metrics);
+        List<TrendPrediction> predictions = computePredictions();
+
         int score = computeScore(findings);
         String overall = overall(findings);
-        String summary = buildSummary(findings, overall, score);
+        String summary = buildSummary(findings, overall, score, predictions);
 
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("healthScore", score);
         output.put("overall", overall);
         output.put("findings", findings.size());
+        output.put("predictions", predictions.size());
         audit.appendStep(traceId, new AgentStep(
                 "INSPECT", "ProactiveInspector",
                 Map.of("checks", sources),
@@ -71,12 +82,98 @@ public class InspectionService {
                 UUID.randomUUID().toString(), traceId, Instant.now().toString(),
                 score, overall, summary, findings, sources,
                 logEvents == null ? List.of() : logEvents,
-                System.currentTimeMillis() - start);
+                System.currentTimeMillis() - start,
+                predictions);
+    }
+
+    // ---------- 预测性感知（感知成熟度 3 级）----------
+
+    /** 单轮巡检的数值指标快照（各 check 回填，-1 表示不可用）。 */
+    private static final class Metrics {
+        int diskPct = -1;
+        String diskMount = "";
+        int memPct = -1;
+    }
+
+    private record Sample(long epochMs, int diskPct, String diskMount, int memPct) {}
+
+    private void recordSample(Metrics m) {
+        if (m.diskPct < 0 && m.memPct < 0) {
+            return;
+        }
+        history.addLast(new Sample(System.currentTimeMillis(), m.diskPct, m.diskMount, m.memPct));
+        long cutoff = System.currentTimeMillis() - SAMPLE_TTL_MS;
+        while (history.size() > MAX_SAMPLES
+                || (!history.isEmpty() && history.peekFirst().epochMs() < cutoff)) {
+            history.pollFirst();
+        }
+    }
+
+    /** 基于首末采样点做线性趋势外推：预测磁盘写满/内存耗尽时间。采样不足（<2 点）时返回空。 */
+    private List<TrendPrediction> computePredictions() {
+        List<TrendPrediction> out = new ArrayList<>();
+        List<Sample> samples = new ArrayList<>(history);
+        predictOne(out, samples, "disk", s -> s.diskPct(), "磁盘写满(100%)");
+        predictOne(out, samples, "memory", s -> s.memPct(), "内存耗尽(100%)");
+        return out;
+    }
+
+    private void predictOne(List<TrendPrediction> out, List<Sample> samples,
+                            String metric, java.util.function.ToIntFunction<Sample> getter, String exhaustName) {
+        Sample first = null, last = null;
+        int count = 0;
+        for (Sample s : samples) {
+            if (getter.applyAsInt(s) < 0) continue;
+            if (first == null) first = s;
+            last = s;
+            count++;
+        }
+        if (first == null || last == null || count < 2 || last.epochMs() <= first.epochMs()) {
+            return;
+        }
+        double spanHours = (last.epochMs() - first.epochMs()) / 3_600_000.0;
+        int current = getter.applyAsInt(last);
+        double rate = (getter.applyAsInt(last) - getter.applyAsInt(first)) / spanHours;
+        String basis = "基于 " + count + " 个采样点，跨度 " + formatDuration(last.epochMs() - first.epochMs());
+
+        String severity;
+        String projection;
+        if (rate <= 0.01) {
+            severity = "OK";
+            projection = "使用率稳定或下降（" + String.format("%+.2f", rate) + "%/小时），无耗尽风险";
+        } else {
+            double hoursToFull = (100.0 - current) / rate;
+            if (hoursToFull <= 24) {
+                severity = "WARN";
+                projection = "按当前增速(" + String.format("%.2f", rate) + "%/小时)预计 "
+                        + formatHours(hoursToFull) + "后" + exhaustName + "，建议提前清理/扩容";
+            } else if (hoursToFull <= 24 * 7) {
+                severity = "INFO";
+                projection = "按当前增速预计约 " + String.format("%.1f", hoursToFull / 24) + " 天后" + exhaustName + "，建议排入巡检计划";
+            } else {
+                severity = "OK";
+                projection = "增长缓慢，按当前增速 7 天内无耗尽风险";
+            }
+        }
+        out.add(new TrendPrediction(metric, current, Math.round(rate * 100.0) / 100.0,
+                severity, projection, basis));
+    }
+
+    private String formatHours(double hours) {
+        return hours < 1 ? "约 " + Math.max(1, Math.round(hours * 60)) + " 分钟"
+                : "约 " + String.format("%.1f", hours) + " 小时";
+    }
+
+    private String formatDuration(long ms) {
+        long minutes = ms / 60_000;
+        if (minutes < 1) return ms / 1000 + " 秒";
+        if (minutes < 60) return minutes + " 分钟";
+        return String.format("%.1f", minutes / 60.0) + " 小时";
     }
 
     // ---------- 各项检查 ----------
 
-    private InspectionFinding checkDisk(List<String> sources) {
+    private InspectionFinding checkDisk(List<String> sources, Metrics metrics) {
         sources.add("df -P");
         ExecResult r = run(List.of("df", "-P"));
         if (!ok(r)) {
@@ -104,6 +201,8 @@ public class InspectionService {
         if (worstPct < 0) {
             return unknown("disk-usage", "disk", "磁盘使用率", "未解析到有效文件系统");
         }
+        metrics.diskPct = worstPct;
+        metrics.diskMount = worstMount;
         String sev = worstPct >= props.getDiskCriticalPercent() ? "CRITICAL"
                 : worstPct >= props.getDiskWarnPercent() ? "WARN" : "OK";
         String sug = "OK".equals(sev) ? "磁盘容量充足，无需处理"
@@ -114,7 +213,7 @@ public class InspectionService {
                 worstLine, sug);
     }
 
-    private InspectionFinding checkMemory(List<String> sources) {
+    private InspectionFinding checkMemory(List<String> sources, Metrics metrics) {
         sources.add("free");
         ExecResult r = run(List.of("free"));
         if (!ok(r)) {
@@ -139,6 +238,7 @@ public class InspectionService {
         }
         long usedCalc = available >= 0 ? (total - available) : used;
         int pct = (int) Math.round(usedCalc * 100.0 / total);
+        metrics.memPct = pct;
         String sev = pct >= props.getMemCriticalPercent() ? "CRITICAL"
                 : pct >= props.getMemWarnPercent() ? "WARN" : "OK";
         String sug = "OK".equals(sev) ? "内存充足，无需处理"
@@ -312,7 +412,8 @@ public class InspectionService {
         return "HEALTHY";
     }
 
-    private String buildSummary(List<InspectionFinding> findings, String overall, int score) {
+    private String buildSummary(List<InspectionFinding> findings, String overall, int score,
+                                List<TrendPrediction> predictions) {
         List<String> alerts = new ArrayList<>();
         int unknown = 0;
         for (InspectionFinding f : findings) {
@@ -331,6 +432,12 @@ public class InspectionService {
               .append(" 项指标在当前环境无法采集（可能命令缺失或非目标系统），巡检结果不完整，评分仅供参考，建议在目标麒麟/LoongArch 主机复测。");
         } else if (alerts.isEmpty()) {
             sb.append("本轮巡检未发现需要关注的风险项。");
+        }
+        for (TrendPrediction p : predictions) {
+            if ("WARN".equals(p.severity()) || "INFO".equals(p.severity())) {
+                sb.append("【预测】").append("disk".equals(p.metric()) ? "磁盘" : "内存")
+                  .append("：").append(p.projection()).append("。");
+            }
         }
         return sb.toString();
     }

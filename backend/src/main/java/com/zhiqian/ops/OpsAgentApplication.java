@@ -10,6 +10,8 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+import java.io.PrintStream;
+
 /**
  * OS 智能运维 Agent 启动类。
  * B/S 架构：后端同时提供 REST(/api/ops/**) 与 MCP(/mcp/rpc) 两类入口。
@@ -34,14 +36,19 @@ public class OpsAgentApplication {
         }
 
         if (stdioMode) {
-            // stdout 专用于 JSON-RPC 响应，关闭日志以免污染协议流
-            System.setProperty("logging.level.root", "OFF");
+            // stdout 必须是纯净的 JSON-RPC 协议流。Spring/logback 的 ConsoleAppender 默认写 System.out，
+            // 且启动早期日志在 logging.level 生效前就会输出，单靠关日志级别不足以防污染。
+            // 因此：先保留真正的 stdout 给协议流，再把 System.out 重定向到 stderr，
+            // 这样所有框架日志（含启动早期日志）都落到 stderr，不破坏 JSON-RPC 结构。
+            PrintStream protocolOut = System.out;
+            System.setOut(System.err);
+            System.setProperty("logging.level.root", "WARN");
             ConfigurableApplicationContext ctx = new SpringApplicationBuilder(OpsAgentApplication.class)
                     .web(WebApplicationType.NONE)
                     .bannerMode(Banner.Mode.OFF)
                     .run(args);
             McpStdioServer server = ctx.getBean(McpStdioServer.class);
-            int code = server.serve(System.in, System.out);
+            int code = server.serve(System.in, protocolOut);
             ctx.close();
             System.exit(code);
         } else {

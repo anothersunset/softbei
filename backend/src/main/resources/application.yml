@@ -15,6 +15,12 @@ ops:
     model: ${OPS_LLM_MODEL:deepseek-chat}
     api-key: ${OPS_LLM_API_KEY:}
     timeout-seconds: 60
+    # 主备模型自动切换：配置备用 OpenAI 兼容端点后，主模型失败自动降级（最终 Mock 兜底，服务不中断）
+    fallback-provider: ${OPS_LLM_FALLBACK_PROVIDER:}
+    fallback-base-url: ${OPS_LLM_FALLBACK_BASE_URL:}
+    fallback-model: ${OPS_LLM_FALLBACK_MODEL:}
+    fallback-api-key: ${OPS_LLM_FALLBACK_API_KEY:}
+    failover-cooldown-ms: ${OPS_LLM_FAILOVER_COOLDOWN_MS:120000}
   exec:
     # 最小权限：核心运维动作在受限账户下执行，非必要不用 root
     run-as-user: ${OPS_EXEC_USER:opsagent}
@@ -28,6 +34,10 @@ ops:
     # 前端/接口仅返回输出预览，完整 stdout/stderr 流式写入 output-audit-dir，防止大输出撑爆内存。
     output-preview-bytes: ${OPS_EXEC_OUTPUT_PREVIEW_BYTES:2097152}
     output-audit-dir: ${OPS_EXEC_OUTPUT_AUDIT_DIR:logs/exec-output}
+    # 变更类命令真实执行前的目标文件自动备份目录（供一键回滚恢复）
+    backup-dir: ${OPS_EXEC_BACKUP_DIR:logs/backups}
+    # 断点续跑：回滚账本/待确认计划 JSONL 落盘目录（重启后仍可确认执行、仍可回滚）；置空禁用
+    state-dir: ${OPS_STATE_DIR:logs/state}
   # 主动巡检：只读体检阈值与定时开关（规则外置，便于按环境调整）
   inspect:
     scheduled-enabled: ${OPS_INSPECT_SCHEDULED:false}

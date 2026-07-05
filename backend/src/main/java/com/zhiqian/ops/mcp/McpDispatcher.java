@@ -114,11 +114,8 @@ public class McpDispatcher {
     private Map<String, Object> toolsList() {
         List<McpToolSpec> specs = new ArrayList<>();
         for (AgentTool t : registry.all()) {
-            // 当前所有工具均无入参(只读感知/巡检)，inputSchema 为不含属性的 object。
-            Map<String, Object> inputSchema = new LinkedHashMap<>();
-            inputSchema.put("type", "object");
-            inputSchema.put("properties", Map.of());
-            inputSchema.put("additionalProperties", false);
+            // 由工具自身声明 inputSchema：无参工具返回空 properties，有参工具声明其参数(按需感知)。
+            Map<String, Object> inputSchema = t.inputSchema();
 
             // ToolAnnotations：全部工具只读、非破坏性、幂等，仅作用于本机受控主机。
             Map<String, Object> annotations = new LinkedHashMap<>();

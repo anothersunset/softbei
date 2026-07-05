@@ -25,6 +25,10 @@ public class ExecProperties {
     private int outputPreviewBytes = 2 * 1024 * 1024;
     /** 完整命令输出的审计落盘目录。 */
     private String outputAuditDir = "logs/exec-output";
+    /** 变更类命令真实执行前的目标文件自动备份目录。 */
+    private String backupDir = "logs/backups";
+    /** 断点续跑状态目录（回滚账本/待确认计划 JSONL 落盘）；空串表示禁用持久化（纯内存）。 */
+    private String stateDir = "";
 
     public String getRunAsUser() { return runAsUser; }
     public void setRunAsUser(String runAsUser) { this.runAsUser = runAsUser; }
@@ -42,4 +46,8 @@ public class ExecProperties {
     public void setOutputPreviewBytes(int outputPreviewBytes) { this.outputPreviewBytes = outputPreviewBytes; }
     public String getOutputAuditDir() { return outputAuditDir; }
     public void setOutputAuditDir(String outputAuditDir) { this.outputAuditDir = outputAuditDir; }
+    public String getBackupDir() { return backupDir; }
+    public void setBackupDir(String backupDir) { this.backupDir = backupDir; }
+    public String getStateDir() { return stateDir; }
+    public void setStateDir(String stateDir) { this.stateDir = stateDir; }
 }

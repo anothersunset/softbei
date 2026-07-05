@@ -167,6 +167,8 @@ guard:
     - "NOPASSWD"
     - "(写入|修改|追加|添加|加).{0,10}/etc/sudoers"
     - "(反弹|reverse)\\s*shell|/dev/tcp/"
+    - "\\b(curl|wget)\\b[^\\n|;]*(\\||%7c)\\s*(sudo\\s+)?(sh|bash|dash|zsh|ksh)\\b"
+    - "\\|\\s*(sudo\\s+)?(sh|bash|dash|zsh|ksh|python|python3|perl|ruby|node|php)\\b"
     - "\\bncat\\b.{0,30}(-e|--exec)\\b"
     - "\\bpython(3)?\\b.{0,80}(socket|subprocess|os\\.dup2)"
     - "echo\\s+-e\\s+.*\\\\x[0-9a-fA-F]{2}"

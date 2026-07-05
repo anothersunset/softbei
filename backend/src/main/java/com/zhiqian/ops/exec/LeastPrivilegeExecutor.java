@@ -53,6 +53,91 @@ public class LeastPrivilegeExecutor {
     }
 
     /** 执行变更类命令（dry-run 打开时不真正执行；接入熔断兜底）。 */
+    public ExecResult runReadOnlyPipeline(List<List<String>> pipeline) {
+        long start = System.currentTimeMillis();
+        if (pipeline == null || pipeline.isEmpty()) {
+            return new ExecResult(-1, "", "empty command", false, 0);
+        }
+        if (pipeline.size() == 1) {
+            return runReadOnly(pipeline.get(0));
+        }
+
+        List<Process> processes = new ArrayList<>();
+        List<CompletableFuture<String>> stderrDrains = new ArrayList<>();
+        List<CompletableFuture<Void>> pumps = new ArrayList<>();
+        try {
+            for (List<String> argv : pipeline) {
+                if (argv == null || argv.isEmpty()) {
+                    return new ExecResult(-1, "", "empty pipeline stage", false, System.currentTimeMillis() - start);
+                }
+                ProcessBuilder pb = new ProcessBuilder(commandWithPrivilege(argv));
+                pb.directory(new File(props.getWorkingDir()));
+                pb.redirectErrorStream(false);
+                processes.add(pb.start());
+            }
+
+            String execId = UUID.randomUUID().toString();
+            for (int i = 0; i < processes.size(); i++) {
+                Process p = processes.get(i);
+                int stage = i + 1;
+                stderrDrains.add(CompletableFuture.supplyAsync(
+                        () -> drainStream(p.getErrorStream(), execId + "-p" + stage, "stderr")));
+            }
+            for (int i = 0; i < processes.size() - 1; i++) {
+                Process from = processes.get(i);
+                Process to = processes.get(i + 1);
+                pumps.add(CompletableFuture.runAsync(() -> pump(from.getInputStream(), to.getOutputStream())));
+            }
+
+            Process last = processes.get(processes.size() - 1);
+            CompletableFuture<String> stdout = CompletableFuture.supplyAsync(
+                    () -> drainStream(last.getInputStream(), execId + "-p" + processes.size(), "stdout"));
+
+            boolean finished = true;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(props.getTimeoutSeconds());
+            for (Process p : processes) {
+                long remainingNanos = deadline - System.nanoTime();
+                if (remainingNanos <= 0 || !p.waitFor(remainingNanos, TimeUnit.NANOSECONDS)) {
+                    finished = false;
+                    break;
+                }
+            }
+            if (!finished) {
+                for (Process p : processes) {
+                    p.destroyForcibly();
+                }
+                stdout.cancel(true);
+                stderrDrains.forEach(f -> f.cancel(true));
+                pumps.forEach(f -> f.cancel(true));
+                return new ExecResult(-1, "", "timeout: " + props.getTimeoutSeconds() + "s", false,
+                        System.currentTimeMillis() - start);
+            }
+
+            for (CompletableFuture<Void> pump : pumps) {
+                pump.join();
+            }
+
+            StringBuilder stderr = new StringBuilder();
+            for (int i = 0; i < stderrDrains.size(); i++) {
+                String s = stderrDrains.get(i).join();
+                if (s != null && !s.isBlank()) {
+                    if (!stderr.isEmpty()) {
+                        stderr.append(System.lineSeparator());
+                    }
+                    stderr.append("[pipe-stage-").append(i + 1).append("] ").append(s);
+                }
+            }
+            return new ExecResult(last.exitValue(), stdout.join(), stderr.toString(), false,
+                    System.currentTimeMillis() - start);
+        } catch (Exception e) {
+            for (Process p : processes) {
+                p.destroyForcibly();
+            }
+            return new ExecResult(-1, "", "execution exception: " + e.getMessage(), false,
+                    System.currentTimeMillis() - start);
+        }
+    }
+
     public ExecResult run(List<String> argv) {
         return exec(argv, false);
     }
@@ -73,14 +158,7 @@ public class LeastPrivilegeExecutor {
             return new ExecResult(-1, "", "[circuit-open] 连续失败已触发熔断，暂停高危执行约 " + leftSec + "s，请人工介入排查后再试", false, System.currentTimeMillis() - start);
         }
         ExecResult result;
-        List<String> cmd = new ArrayList<>();
-        if (props.isUseSudo()) {
-            cmd.add("sudo");
-            cmd.add("-n");
-            cmd.add("-u");
-            cmd.add(props.getRunAsUser());
-        }
-        cmd.addAll(argv);
+        List<String> cmd = commandWithPrivilege(argv);
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.directory(new File(props.getWorkingDir()));
@@ -112,6 +190,26 @@ public class LeastPrivilegeExecutor {
             }
         }
         return result;
+    }
+
+    private List<String> commandWithPrivilege(List<String> argv) {
+        List<String> cmd = new ArrayList<>();
+        if (props.isUseSudo()) {
+            cmd.add("sudo");
+            cmd.add("-n");
+            cmd.add("-u");
+            cmd.add(props.getRunAsUser());
+        }
+        cmd.addAll(argv);
+        return cmd;
+    }
+
+    private void pump(InputStream in, OutputStream out) {
+        try (InputStream source = in; OutputStream sink = out) {
+            source.transferTo(sink);
+        } catch (Exception ignored) {
+            // A downstream diagnostic command may exit early.
+        }
     }
 
     private String drainStream(InputStream in, String execId, String streamName) {
