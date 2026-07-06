@@ -35,7 +35,7 @@ public class ConfigBackupTool implements MutatingTool {
     public String description() {
         return "【变更类·非破坏】为指定配置文件创建带时间戳的备份副本（<path>.bak-<时间戳>），"
                 + "真实执行时受管备份目录同步留存快照并登记回滚账本（可一键恢复）。"
-                + "与其他变更工具共用护栏裁决与 confirm=true 二次确认门禁；默认 dry-run";
+                + "与其他变更工具共用护栏裁决与 pendingMutationId + confirm=true 二次确认门禁；默认 dry-run";
     }
 
     /** 仅新增副本、不改动原文件：覆写破坏性提示。 */
@@ -53,11 +53,15 @@ public class ConfigBackupTool implements MutatingTool {
         path.put("description", "待备份配置文件的绝对路径，如 /etc/nginx/nginx.conf、/etc/my.cnf");
         Map<String, Object> confirm = new LinkedHashMap<>();
         confirm.put("type", "boolean");
-        confirm.put("description", "二次确认标志：首次调用返回风险裁决（REVIEW_PENDING），审阅后携带 true 才会执行");
+        confirm.put("description", "二次确认标志：首次调用返回风险裁决（REVIEW_PENDING），审阅后需同时携带 pendingMutationId 才会执行");
         confirm.put("default", false);
+        Map<String, Object> pendingMutationId = new LinkedHashMap<>();
+        pendingMutationId.put("type", "string");
+        pendingMutationId.put("description", "首次 REVIEW_PENDING 返回的待确认变更 id；confirm=true 时必须携带且与同一工具/参数匹配");
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("path", path);
         props.put("confirm", confirm);
+        props.put("pendingMutationId", pendingMutationId);
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         schema.put("properties", props);
@@ -78,9 +82,10 @@ public class ConfigBackupTool implements MutatingTool {
             return out;
         }
         boolean confirm = AgentTool.boolArg(input, "confirm", false);
+        String pendingMutationId = AgentTool.safeStrArg(input, "pendingMutationId", null);
         String backup = path + ".bak-" + LocalDateTime.now().format(TS);
         Map<String, Object> out = guarded.execute(name(),
-                List.of(List.of("cp", "-p", path, backup)), confirm);
+                List.of(List.of("cp", "-p", path, backup)), confirm, pendingMutationId);
         out.put("backupTarget", backup);
         return out;
     }

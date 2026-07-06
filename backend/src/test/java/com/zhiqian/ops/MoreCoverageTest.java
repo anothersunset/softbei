@@ -37,12 +37,12 @@ class MoreCoverageTest {
     @Test
     void llmProperties_setters() {
         LlmProperties p = new LlmProperties();
-        p.setProvider("xiaomi");
-        assertEquals("xiaomi", p.getProvider());
+        p.setProvider("deepseek");
+        assertEquals("deepseek", p.getProvider());
         p.setBaseUrl("https://custom.api");
         assertEquals("https://custom.api", p.getBaseUrl());
-        p.setModel("mimo-v2.5-pro");
-        assertEquals("mimo-v2.5-pro", p.getModel());
+        p.setModel("deepseek-chat");
+        assertEquals("deepseek-chat", p.getModel());
         p.setApiKey("sk-test");
         assertEquals("sk-test", p.getApiKey());
         p.setTimeoutSeconds(120);
