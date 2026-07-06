@@ -442,8 +442,9 @@ run_mcp_http_checks() {
   req='{"jsonrpc":"2.0","id":3,"method":"tools/list"}'
   resp="$(api_post "/mcp/rpc" "$req")"
   printf '%s' "$resp" > "${REPORT_DIR}/mcp-tools-list.json"
-  check_jq "MCPH-04" "mcp-tools-list" "$resp" '(.result.tools | length) >= 6'
-  check_jq "MCPH-05" "mcp-tool-annotations" "$resp" 'all(.result.tools[]; .annotations.readOnlyHint == true and .annotations.destructiveHint == false)'
+  check_jq "MCPH-04" "mcp-tools-list" "$resp" '(.result.tools | length) >= 9'
+  check_jq "MCPH-05" "mcp-tool-annotations" "$resp" 'all(.result.tools[] | select([.name] | inside(["log_rotate","service_restart","config_backup"]) | not); .annotations.readOnlyHint == true and .annotations.destructiveHint == false)'
+  check_jq "MCPH-05b" "mcp-mutating-annotations" "$resp" '([.result.tools[] | select(.annotations.readOnlyHint == false) | .name] | sort) == ["config_backup","log_rotate","service_restart"]'
 
   req='{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"system_sense","arguments":{}}}'
   resp="$(api_post "/mcp/rpc" "$req")"
@@ -453,6 +454,17 @@ run_mcp_http_checks() {
   req='{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"unknown_tool","arguments":{}}}'
   resp="$(api_post "/mcp/rpc" "$req")"
   check_jq "MCPH-07" "mcp-invalid-tool-error" "$resp" '.error.code == -32602'
+
+  # 变更类 MCP 工具安全闭环：未确认 -> REVIEW_PENDING；确认 -> 护栏在环执行（dry-run 下不落盘）
+  req='{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"service_restart","arguments":{"unit":"nginx"}}}'
+  resp="$(api_post "/mcp/rpc" "$req")"
+  printf '%s' "$resp" > "${REPORT_DIR}/mcp-mutation-pending.json"
+  check_jq "MCPH-08" "mcp-mutation-review-pending" "$resp" '.result.isError == false and .result.structuredContent.status == "REVIEW_PENDING" and .result.structuredContent.executed == false'
+
+  req='{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"service_restart","arguments":{"unit":"nginx","confirm":true}}}'
+  resp="$(api_post "/mcp/rpc" "$req")"
+  printf '%s' "$resp" > "${REPORT_DIR}/mcp-mutation-confirmed.json"
+  check_jq "MCPH-09" "mcp-mutation-confirmed" "$resp" '.result.structuredContent.status == "EXECUTED" and .result.structuredContent.traceId != null'
 }
 
 run_mcp_stdio_checks() {

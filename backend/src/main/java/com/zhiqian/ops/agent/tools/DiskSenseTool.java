@@ -33,7 +33,10 @@ public class DiskSenseTool implements AgentTool {
     public Map<String, Object> inputSchema() {
         Map<String, Object> path = new LinkedHashMap<>();
         path.put("type", "string");
-        path.put("description", "du 探查的绝对目录路径，如 /var/log、/data；默认 /var/log");
+        path.put("description", "du 探查的绝对目录路径（非绝对路径将回退默认值）");
+        path.put("pattern", "^/");
+        path.put("default", "/var/log");
+        path.put("examples", List.of("/var/log", "/data", "/tmp", "/home"));
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("path", path);
         Map<String, Object> schema = new LinkedHashMap<>();

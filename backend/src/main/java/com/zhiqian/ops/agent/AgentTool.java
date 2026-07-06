@@ -29,6 +29,20 @@ public interface AgentTool {
         return schema;
     }
 
+    /**
+     * MCP ToolAnnotations：由工具自身声明行为提示。
+     * 默认为只读感知/巡检工具（readOnlyHint=true）；变更类工具经 {@link MutatingTool} 覆写。
+     */
+    default Map<String, Object> annotations() {
+        Map<String, Object> a = new LinkedHashMap<>();
+        a.put("title", name());
+        a.put("readOnlyHint", true);
+        a.put("destructiveHint", false);
+        a.put("idempotentHint", true);
+        a.put("openWorldHint", false);
+        return a;
+    }
+
     /** 安全读取整型入参并夹紧到 [min, max]；缺省/非法时取 def。 */
     static int intArg(Map<String, Object> input, String key, int def, int min, int max) {
         if (input == null) return def;
@@ -40,6 +54,15 @@ public interface AgentTool {
             try { val = Integer.parseInt(s.trim()); } catch (NumberFormatException ignored) { val = def; }
         }
         return Math.max(min, Math.min(max, val));
+    }
+
+    /** 安全读取布尔入参：接受 Boolean 或 "true"/"false" 字符串；缺省/非法时取 def。 */
+    static boolean boolArg(Map<String, Object> input, String key, boolean def) {
+        if (input == null) return def;
+        Object v = input.get(key);
+        if (v instanceof Boolean b) return b;
+        if (v instanceof String s && !s.isBlank()) return Boolean.parseBoolean(s.trim());
+        return def;
     }
 
     /**

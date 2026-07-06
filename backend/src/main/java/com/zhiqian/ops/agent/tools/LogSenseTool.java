@@ -36,10 +36,14 @@ public class LogSenseTool implements AgentTool {
     public Map<String, Object> inputSchema() {
         Map<String, Object> unit = new LinkedHashMap<>();
         unit.put("type", "string");
-        unit.put("description", "systemd 服务单元名，如 nginx、sshd、mysqld；留空则采集全系统错误日志");
+        unit.put("description", "systemd 服务单元名；留空则采集全系统错误日志");
+        unit.put("examples", List.of("nginx", "sshd", "mysqld", "docker"));
         Map<String, Object> lines = new LinkedHashMap<>();
         lines.put("type", "integer");
-        lines.put("description", "拉取的日志行数，1~1000，默认 100");
+        lines.put("description", "拉取的日志行数");
+        lines.put("minimum", 1);
+        lines.put("maximum", 1000);
+        lines.put("default", 100);
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("unit", unit);
         props.put("lines", lines);

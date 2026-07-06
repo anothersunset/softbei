@@ -99,6 +99,8 @@
 ### 🔌 协议与体验
 - **MCP 双传输通道**：HTTP 与 stdio 复用同一 `McpDispatcher` 路由；stdio 以换行分隔 JSON-RPC，体现「MCP 运维插件化」。
 - **MCP 协议合规**：严格对齐 JSON-RPC 2.0 + MCP 规范（协议协商 / 通知 / ping / isError / annotations），MCP-01~08 用例 15/15 全 PASS。
+- **MCP 工具面：感知 + 变更双平面（新）**：11 个 MCP 插件——8 个只读感知/巡检（system/process/disk/network/log/**db/metrics**\_sense + health_inspect，`db_sense` 免凭据探测 MySQL/PostgreSQL/Redis 进程·端口·连接数，`metrics_sense` 抓取 node_exporter / Actuator 的 Prometheus 指标，对齐赛题「数据库、监控系统」集成）+ 3 个**变更类工具**（`log_rotate` 日志轮转 / `service_restart` 服务重启 / `config_backup` 配置备份），变更工具内置 `GuardedMutationExecutor` 安全闭环：护栏裁决（红线 confirm 也无法越过）→ `confirm=true` 二次确认 → 执行前自动备份 → 回滚账本 → 溯源审计，注解按工具自声明（`readOnlyHint`/`destructiveHint`）。
+- **溯源可持续运行（新）**：溯源 JSONL 超阈值自动轮转归档（`OPS_TRACE_ROTATE_BYTES`，默认 32MB），文件不无限增长；查询内存未命中时自动回扫当前+归档文件重建——重启后、被 LRU 淘汰后、已归档的历史 traceId 依然可查。
 - **SSE 实时思维链**：`/api/ops/chat/stream` 逐阶段推送（类 ChatGPT tool_call），前端「实时思维链」面板逐节点展示并附安全评分 / 回滚建议。
 - **可观测性**：接入 `micrometer-registry-prometheus`，打通 `/actuator/prometheus` 指标端点；`deploy/grafana/opsguard-dashboard.json` 提供开箱即用看板。
 

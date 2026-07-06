@@ -33,7 +33,10 @@ public class ProcessSenseTool implements AgentTool {
     public Map<String, Object> inputSchema() {
         Map<String, Object> limit = new LinkedHashMap<>();
         limit.put("type", "integer");
-        limit.put("description", "只返回 CPU 占用前 N 个进程，1~200；留空返回全部");
+        limit.put("description", "只返回 CPU 占用前 N 个进程；留空或 0 返回全部");
+        limit.put("minimum", 0);
+        limit.put("maximum", 200);
+        limit.put("default", 0);
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("limit", limit);
         Map<String, Object> schema = new LinkedHashMap<>();
