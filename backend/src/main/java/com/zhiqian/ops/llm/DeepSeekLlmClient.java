@@ -46,7 +46,7 @@ public class DeepSeekLlmClient implements LlmClient {
             body.put("model", props.getModel());
             body.put("temperature", 0.2);
             body.put("stream", false);
-            // 推理型模型（如 mimo-v2.5-pro）需足够的输出 token 才能完整返回 JSON，过小会被截断导致解析失败
+            // 推理型模型需足够的输出 token 才能完整返回 JSON，过小会被截断导致解析失败
             body.put("max_tokens", 4096);
             ArrayNode messages = body.putArray("messages");
             ObjectNode sys = messages.addObject();

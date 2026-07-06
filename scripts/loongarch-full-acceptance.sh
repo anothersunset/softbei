@@ -19,7 +19,7 @@
 set -uo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/anothersunset/softbei.git}"
-BRANCH="${BRANCH:-codex/opsguard-remediation-hardening}"
+BRANCH="${BRANCH:-main}"
 PORT="${PORT:-18080}"
 BASE="http://127.0.0.1:${PORT}"
 TOKEN="${OPS_API_TOKEN:-opsguard-vm-token-$(date +%s)}"
@@ -422,7 +422,7 @@ run_sse_checks() {
 }
 
 run_mcp_http_checks() {
-  local code resp req
+  local code resp req pending_id
 
   code="$(http_code "${BASE}/mcp/rpc" -H "Content-Type: application/json" -X POST -d '{"jsonrpc":"2.0","id":1,"method":"ping"}')"
   if [ "$code" = "401" ]; then
@@ -459,12 +459,18 @@ run_mcp_http_checks() {
   req='{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"service_restart","arguments":{"unit":"nginx"}}}'
   resp="$(api_post "/mcp/rpc" "$req")"
   printf '%s' "$resp" > "${REPORT_DIR}/mcp-mutation-pending.json"
-  check_jq "MCPH-08" "mcp-mutation-review-pending" "$resp" '.result.isError == false and .result.structuredContent.status == "REVIEW_PENDING" and .result.structuredContent.executed == false'
+  check_jq "MCPH-08" "mcp-mutation-review-pending" "$resp" '.result.isError == false and .result.structuredContent.status == "REVIEW_PENDING" and .result.structuredContent.executed == false and (.result.structuredContent.pendingMutationId | type == "string" and length > 0)'
+  pending_id="$(printf '%s' "$resp" | jq -r '.result.structuredContent.pendingMutationId // empty')"
 
   req='{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"service_restart","arguments":{"unit":"nginx","confirm":true}}}'
   resp="$(api_post "/mcp/rpc" "$req")"
+  printf '%s' "$resp" > "${REPORT_DIR}/mcp-mutation-forged-confirm.json"
+  check_jq "MCPH-09" "mcp-mutation-direct-confirm-blocked" "$resp" '.result.structuredContent.status == "REVIEW_PENDING" and .result.structuredContent.executed == false and .result.structuredContent.traceId == null'
+
+  req="$(jq -n --arg pendingMutationId "$pending_id" '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"service_restart","arguments":{"unit":"nginx","confirm":true,"pendingMutationId":$pendingMutationId}}}')"
+  resp="$(api_post "/mcp/rpc" "$req")"
   printf '%s' "$resp" > "${REPORT_DIR}/mcp-mutation-confirmed.json"
-  check_jq "MCPH-09" "mcp-mutation-confirmed" "$resp" '.result.structuredContent.status == "EXECUTED" and .result.structuredContent.traceId != null'
+  check_jq "MCPH-10" "mcp-mutation-confirmed" "$resp" '.result.structuredContent.status == "EXECUTED" and .result.structuredContent.traceId != null'
 }
 
 run_mcp_stdio_checks() {

@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 变更类 MCP 工具的共享安全内核：任何 {@link com.zhiqian.ops.agent.MutatingTool}
@@ -29,6 +31,8 @@ import java.util.Map;
  */
 @Component
 public class GuardedMutationExecutor {
+    private static final int MAX_PENDING = 200;
+    private static final long PENDING_TTL_MS = 10 * 60 * 1000L;
 
     private final IntentRiskGuard guard;
     private final LeastPrivilegeExecutor executor;
@@ -36,6 +40,7 @@ public class GuardedMutationExecutor {
     private final RollbackLedger ledger;
     private final OpsAuditService audit;
     private final PreChangeBackup preChangeBackup;
+    private final Map<String, PendingMutation> pendingMutations = new ConcurrentHashMap<>();
 
     public GuardedMutationExecutor(IntentRiskGuard guard,
                                    LeastPrivilegeExecutor executor,
@@ -52,7 +57,12 @@ public class GuardedMutationExecutor {
 
     /** 无验证探针的执行。 */
     public Map<String, Object> execute(String toolName, List<List<String>> steps, boolean confirm) {
-        return execute(toolName, steps, confirm, null);
+        return execute(toolName, steps, confirm, null, null);
+    }
+
+    public Map<String, Object> execute(String toolName, List<List<String>> steps,
+                                       boolean confirm, String pendingMutationId) {
+        return execute(toolName, steps, confirm, pendingMutationId, null);
     }
 
     /**
@@ -64,6 +74,17 @@ public class GuardedMutationExecutor {
      */
     public Map<String, Object> execute(String toolName, List<List<String>> steps,
                                        boolean confirm, List<String> verifyArgv) {
+        return execute(toolName, steps, confirm, null, verifyArgv);
+    }
+
+    /**
+     * 护栏在环地执行一组变更步骤。
+     * confirm=true 不能首轮直达执行，必须携带上一轮 REVIEW_PENDING 返回的 pendingMutationId，
+     * 且工具名与 argv 签名必须完全匹配。
+     */
+    public Map<String, Object> execute(String toolName, List<List<String>> steps,
+                                       boolean confirm, String pendingMutationId,
+                                       List<String> verifyArgv) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("tool", toolName);
 
@@ -93,10 +114,17 @@ public class GuardedMutationExecutor {
 
         // 3. 二次确认门禁：门槛由护栏裁决决定，工具无权降级
         if (worst.requiresApproval() && !confirm) {
-            out.put("status", "REVIEW_PENDING");
-            out.put("executed", false);
-            out.put("message", "变更操作需人工二次确认：请审阅以上风险裁决后携带 confirm=true 重新调用");
-            return out;
+            return pendingReview(toolName, steps, out,
+                    "变更操作需人工二次确认：请审阅以上风险裁决后携带 pendingMutationId 与 confirm=true 重新调用");
+        }
+        if (worst.requiresApproval()) {
+            evictExpiredPending();
+            String signature = signature(toolName, steps);
+            PendingMutation pending = pendingMutationId == null ? null : pendingMutations.remove(pendingMutationId);
+            if (pending == null || !pending.toolName().equals(toolName) || !pending.signature().equals(signature)) {
+                return pendingReview(toolName, steps, out,
+                        "confirm=true 需要匹配服务端已登记的 pendingMutationId；本次请求未执行，已返回新的待确认 id");
+            }
         }
 
         // 4. 溯源审计：MCP 变更与主链路同一套 trace 体系
@@ -206,4 +234,44 @@ public class GuardedMutationExecutor {
         }
         return String.join(" && ", cmds);
     }
+
+    private Map<String, Object> pendingReview(String toolName, List<List<String>> steps,
+                                              Map<String, Object> out, String message) {
+        evictExpiredPending();
+        String id = UUID.randomUUID().toString();
+        pendingMutations.put(id, new PendingMutation(toolName, signature(toolName, steps), System.currentTimeMillis()));
+        out.put("status", "REVIEW_PENDING");
+        out.put("executed", false);
+        out.put("pendingMutationId", id);
+        out.put("pendingExpiresInMs", PENDING_TTL_MS);
+        out.put("message", message);
+        return out;
+    }
+
+    private void evictExpiredPending() {
+        long cutoff = System.currentTimeMillis() - PENDING_TTL_MS;
+        pendingMutations.entrySet().removeIf(e -> e.getValue().createdAtMs() < cutoff);
+        if (pendingMutations.size() <= MAX_PENDING) {
+            return;
+        }
+        pendingMutations.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue((a, b) -> Long.compare(a.createdAtMs(), b.createdAtMs())))
+                .limit(Math.max(0, pendingMutations.size() - MAX_PENDING))
+                .map(Map.Entry::getKey)
+                .toList()
+                .forEach(pendingMutations::remove);
+    }
+
+    private String signature(String toolName, List<List<String>> steps) {
+        List<String> parts = new ArrayList<>();
+        parts.add(toolName == null ? "" : toolName);
+        if (steps != null) {
+            for (List<String> argv : steps) {
+                parts.add(String.join("\u001F", argv));
+            }
+        }
+        return String.join("\u001E", parts);
+    }
+
+    private record PendingMutation(String toolName, String signature, long createdAtMs) {}
 }

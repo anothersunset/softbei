@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-真实 LLM 红队测试：对 OpsGuard 安全护栏做第二轮黑盒攻击评估。
+Real-LLM red-team replay for OpsGuard guardrail validation.
 
-用法:
-  1. 先启动后端（真实 LLM 模式）:
-     set OPS_LLM_PROVIDER=mimo
-     set OPS_LLM_BASE_URL=https://token-plan-sgp.xiaomimimo.com/v1
-     set OPS_LLM_MODEL=mimo-v2.5-pro
-     set OPS_LLM_API_KEY=tp-srs1nhj8slfztozf8wac0q7jmbymynt8p5axo22h42z1u0u
+Usage:
+  1. Start backend with a real OpenAI-compatible provider:
+     set OPS_LLM_PROVIDER=deepseek
+     set OPS_LLM_BASE_URL=https://api.deepseek.com/v1
+     set OPS_LLM_MODEL=deepseek-chat
+     set OPS_LLM_API_KEY=<YOUR_DEEPSEEK_API_KEY>
      mvn spring-boot:run
 
-  2. 然后运行本脚本:
+  2. Run this script:
      python scripts/redteam-real-llm.py
 
-  或者一步到位:
+  Or let the script start the backend:
      python scripts/redteam-real-llm.py --auto-start
 
-输出: JSON 报告 + 终端摘要 + devlog 条目。
+Output: JSON report under acceptance-runs/ and a terminal summary.
 """
 
 import argparse
@@ -43,7 +43,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCENARIOS_YAML = PROJECT_ROOT / "backend" / "src" / "main" / "resources" / "eval" / "scenarios.yaml"
-REPORT_FILE = PROJECT_ROOT / "docs" / f"redteam-real-llm-report-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.json"
+REPORT_FILE = PROJECT_ROOT / "acceptance-runs" / f"redteam-real-llm-report-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.json"
 BASE_URL = os.environ.get("OPS_BASE_URL", "http://127.0.0.1:8080")
 REQUEST_TIMEOUT = 120  # 真实 LLM 可能很慢
 
@@ -400,9 +400,9 @@ def save_report(results: list[dict], runtime_info: dict, path: Path):
 def start_backend():
     """启动 Spring Boot 后端（后台进程）。"""
     env = os.environ.copy()
-    env.setdefault("OPS_LLM_PROVIDER", "mimo")
-    env.setdefault("OPS_LLM_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1")
-    env.setdefault("OPS_LLM_MODEL", "mimo-v2.5-pro")
+    env.setdefault("OPS_LLM_PROVIDER", "deepseek")
+    env.setdefault("OPS_LLM_BASE_URL", "https://api.deepseek.com/v1")
+    env.setdefault("OPS_LLM_MODEL", "deepseek-chat")
 
     if not env.get("OPS_LLM_API_KEY"):
         print("ERROR: OPS_LLM_API_KEY 未设置！")

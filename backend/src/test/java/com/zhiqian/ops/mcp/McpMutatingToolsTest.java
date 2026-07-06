@@ -96,11 +96,25 @@ class McpMutatingToolsTest {
         // nginx 是核心服务：护栏应升级为 IRREVERSIBLE，工具无权降级
         assertEquals("IRREVERSIBLE", sc.get("riskLevel"));
         assertNull(sc.get("traceId"), "未确认不应产生执行 trace");
+        assertNotNull(sc.get("pendingMutationId"), "未确认的变更应登记服务端 pending id");
     }
 
     @Test
-    void mutation_with_confirm_executes_under_dryrun() {
+    void first_call_confirm_true_does_not_execute_without_pending_id() {
         Map<String, Object> sc = callTool("service_restart", Map.of("unit", "myapp", "confirm", true));
+        assertEquals("REVIEW_PENDING", sc.get("status"));
+        assertEquals(false, sc.get("executed"));
+        assertNull(sc.get("traceId"), "首轮 confirm=true 不能绕过服务端 pending 门禁");
+        assertNotNull(sc.get("pendingMutationId"));
+    }
+
+    @Test
+    void mutation_with_confirm_and_pending_id_executes_under_dryrun() {
+        Map<String, Object> pending = callTool("service_restart", Map.of("unit", "myapp"));
+        String pendingId = String.valueOf(pending.get("pendingMutationId"));
+
+        Map<String, Object> sc = callTool("service_restart",
+                Map.of("unit", "myapp", "confirm", true, "pendingMutationId", pendingId));
         assertEquals("EXECUTED", sc.get("status"));
         String traceId = String.valueOf(sc.get("traceId"));
         assertNotNull(audit.get(traceId), "MCP 变更应落溯源审计");
@@ -109,6 +123,19 @@ class McpMutatingToolsTest {
         assertEquals(1, steps.size());
         Map<?, ?> step = (Map<?, ?>) steps.get(0);
         assertEquals(true, step.get("dryRun"), "默认 dry-run 不真实落盘");
+    }
+
+    @Test
+    void pending_id_cannot_be_reused_for_different_arguments() {
+        Map<String, Object> pending = callTool("service_restart", Map.of("unit", "myapp"));
+        String pendingId = String.valueOf(pending.get("pendingMutationId"));
+
+        Map<String, Object> sc = callTool("service_restart",
+                Map.of("unit", "nginx", "confirm", true, "pendingMutationId", pendingId));
+        assertEquals("REVIEW_PENDING", sc.get("status"));
+        assertEquals(false, sc.get("executed"));
+        assertNull(sc.get("traceId"));
+        assertNotEquals(pendingId, String.valueOf(sc.get("pendingMutationId")));
     }
 
     // ─── 红线：confirm 无法越过 ───
@@ -142,11 +169,33 @@ class McpMutatingToolsTest {
 
     @Test
     void log_rotate_confirmed_produces_archive_and_truncate_steps() {
-        Map<String, Object> sc = callTool("log_rotate", Map.of("path", "/var/log/demo.log", "confirm", true));
+        Map<String, Object> pending = callTool("log_rotate", Map.of("path", "/var/log/demo.log"));
+        String pendingId = String.valueOf(pending.get("pendingMutationId"));
+        Map<String, Object> sc = callTool("log_rotate",
+                Map.of("path", "/var/log/demo.log", "confirm", true, "pendingMutationId", pendingId));
         assertEquals("EXECUTED", sc.get("status"));
         List<?> steps = (List<?>) sc.get("steps");
         assertEquals(2, steps.size(), "轮转 = 归档副本 + 截断原文件两步");
         assertTrue(String.valueOf(sc.get("archive")).startsWith("/var/log/demo.log."));
+    }
+
+    @Test
+    void log_rotate_rejects_symbolic_links_in_live_mode() throws Exception {
+        props.setDryRun(false);
+        Path target = tmp.resolve("real-secret.log");
+        Path link = tmp.resolve("fake.log");
+        Files.writeString(target, "secret\n");
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (Exception unsupportedOnThisFs) {
+            return;
+        }
+
+        Map<String, Object> out = new LogRotateTool(guarded, props)
+                .run(new AgentContext(0L, 0L), Map.of("path", link.toString(), "confirm", true));
+
+        assertEquals("REJECTED", out.get("status"));
+        assertEquals("secret\n", Files.readString(target), "symlink target must not be truncated");
     }
 
     // ─── 真实执行：执行前备份 + 回滚账本 ───
@@ -158,7 +207,11 @@ class McpMutatingToolsTest {
         Files.writeString(target, "key=value\n");
 
         Map<String, Object> out = guarded.execute("config_backup",
-                List.of(List.of("cp", "-p", target.toString(), target + ".bak-test")), true);
+                List.of(List.of("cp", "-p", target.toString(), target + ".bak-test")), false);
+        String pendingId = String.valueOf(out.get("pendingMutationId"));
+
+        out = guarded.execute("config_backup",
+                List.of(List.of("cp", "-p", target.toString(), target + ".bak-test")), true, pendingId);
 
         String traceId = String.valueOf(out.get("traceId"));
         assertTrue(ledger.has(traceId), "真实变更应登记回滚账本");

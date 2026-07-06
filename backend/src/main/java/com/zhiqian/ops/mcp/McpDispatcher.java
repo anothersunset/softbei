@@ -109,7 +109,7 @@ public class McpDispatcher {
                 "OpsGuard 运维工具服务端：感知/巡检类工具（annotations.readOnlyHint=true）为只读采集，可直接调用；"
                         + "变更类工具（annotations.readOnlyHint=false，如 log_rotate/service_restart/config_backup）"
                         + "内置安全闭环——每次调用先经意图风险护栏裁决（红线直接拒绝，confirm 也无法越过），"
-                        + "需审批操作必须携带 confirm=true 二次确认；真实执行前自动备份目标文件并登记回滚账本"
+                        + "需审批操作必须先获得 pendingMutationId，再携带 pendingMutationId + confirm=true 二次确认；真实执行前自动备份目标文件并登记回滚账本"
                         + "（POST /api/ops/rollback/{traceId} 一键回滚），全程按 traceId 溯源审计；"
                         + "默认 dry-run 演示模式不真实落盘变更。");
         return result;

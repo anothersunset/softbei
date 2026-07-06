@@ -99,56 +99,43 @@
 ### 🔌 协议与体验
 - **MCP 双传输通道**：HTTP 与 stdio 复用同一 `McpDispatcher` 路由；stdio 以换行分隔 JSON-RPC，体现「MCP 运维插件化」。
 - **MCP 协议合规**：严格对齐 JSON-RPC 2.0 + MCP 规范（协议协商 / 通知 / ping / isError / annotations），MCP-01~08 用例 15/15 全 PASS。
-- **MCP 工具面：感知 + 变更双平面（新）**：11 个 MCP 插件——8 个只读感知/巡检（system/process/disk/network/log/**db/metrics**\_sense + health_inspect，`db_sense` 免凭据探测 MySQL/PostgreSQL/Redis 进程·端口·连接数，`metrics_sense` 抓取 node_exporter / Actuator 的 Prometheus 指标，对齐赛题「数据库、监控系统」集成）+ 3 个**变更类工具**（`log_rotate` 日志轮转 / `service_restart` 服务重启 / `config_backup` 配置备份），变更工具内置 `GuardedMutationExecutor` 安全闭环：护栏裁决（红线 confirm 也无法越过）→ `confirm=true` 二次确认 → 执行前自动备份 → 回滚账本 → 溯源审计，注解按工具自声明（`readOnlyHint`/`destructiveHint`）。
+- **MCP 工具面：感知 + 变更双平面（新）**：11 个 MCP 插件——8 个只读感知/巡检（system/process/disk/network/log/**db/metrics**\_sense + health_inspect，`db_sense` 免凭据探测 MySQL/PostgreSQL/Redis 进程·端口·连接数，`metrics_sense` 抓取 node_exporter / Actuator 的 Prometheus 指标，对齐赛题「数据库、监控系统」集成）+ 3 个**变更类工具**（`log_rotate` 日志轮转 / `service_restart` 服务重启 / `config_backup` 配置备份），变更工具内置 `GuardedMutationExecutor` 安全闭环：护栏裁决（红线 confirm 也无法越过）→ `pendingMutationId + confirm=true` 二次确认 → 执行前自动备份 → 回滚账本 → 溯源审计，注解按工具自声明（`readOnlyHint`/`destructiveHint`）。
 - **溯源可持续运行（新）**：溯源 JSONL 超阈值自动轮转归档（`OPS_TRACE_ROTATE_BYTES`，默认 32MB），文件不无限增长；查询内存未命中时自动回扫当前+归档文件重建——重启后、被 LRU 淘汰后、已归档的历史 traceId 依然可查。
 - **SSE 实时思维链**：`/api/ops/chat/stream` 逐阶段推送（类 ChatGPT tool_call），前端「实时思维链」面板逐节点展示并附安全评分 / 回滚建议。
 - **可观测性**：接入 `micrometer-registry-prometheus`，打通 `/actuator/prometheus` 指标端点；`deploy/grafana/opsguard-dashboard.json` 提供开箱即用看板。
 
 ### ✅ 验收证据
 
-| 项目 | 结果 |
+| 项目 | 当前结果 |
 |---|---|
-| 安全护栏单元测试 + Mock 覆盖 | **248/248 PASS**（2026-07-05 本地 `mvn test`；含 guard/pipeline/planner/exec/inspect/controller + 红蓝语料 + ReAct 感知 + 意图交叉校验 + 备份/回滚/断点续跑 + 主备切换 + 预测性感知） |
-| 红蓝对抗注入语料回放（48 条） | **48/48 PASS**：注入识别 17/17、注入误拦 0/6、危险命令拦截 10/10、正常命令误拦 0/8 |
-| 真实故障场景增补集回放（12 条，核心 48/48 口径不变） | **12/12 PASS**（`RealWorldCorpusTest`） |
-| 盲测泛化评测（OOD，未参与调参） | 混淆矩阵 + P/R/F1 由 `BlindsetRunnerTest` 实跑产生（见 `docs/redteam-generalization.md`） |
-| 测试覆盖率（JaCoCo 实测） | 指令 84.4% · 分支 67.9% · 行 85.0%（2026-07-02 本地 JaCoCo CSV） |
-| 历史云服务器部署验收（腾讯云 Ubuntu，含真实 LLM provider=xiaomi） | **19/19 PASS**（见历史报告；四级风险分级改造后尚未重新跑云端全量验收） |
-| MCP 协议合规验证（MCP-01~08） | **15/15 PASS** |
+| 全量后端回归 | **281/281 PASS**（2026-07-06，本地 JDK 21，`mvn -B -f backend/pom.xml test`） |
+| JaCoCo 覆盖率 | 指令 **82.5%** · 分支 **66.5%** · 行 **82.8%**（2026-07-06，本地 `backend/target/site/jacoco/jacoco.csv`） |
+| 红蓝对抗注入语料 | **50/50 PASS**：注入识别 19/19、注入误拦 0/6、危险命令拦截 9/9、正常命令误拦 0/9 |
+| 盲测泛化语料 | **44/44 PASS**，注入与危险命令两组 P/R/F1 均为 1.000 |
+| 真实故障场景增补集 | **12/12 PASS**（`RealWorldCorpusTest`） |
+| 场景评测 | **33/33 PASS**（READONLY / EXECUTABLE / IRREVERSIBLE / BLOCK + 人在回路） |
+| MCP 变更工具闭环 | 定向回归 **23/23 PASS**，覆盖 `pendingMutationId` 确认门、trace 轮转回扫、db/metrics 感知工具 |
+| GitHub Actions | `origin/main` 合并提交 `959b23a` 云端 CI 全绿；本分支修复完成后以新 CI 结果为最终提交证据 |
 
-> 当前代码最近一次本地验证为 2026-07-05 `mvn test` 248/248 PASS（JDK 21，项目 release 17）。云服务器验收为历史归档记录，完整记录见 `docs/17-本地测评报告.md` 与 `docs/云服务器部署验收测试报告.md`；方法学见 `docs/15`，差异化与答辩见 `docs/16`，已知限制与演进路线见 `docs/18-已知限制与演进路线.md`。
+> 当前仓库不再把过期云端记录、旧截图录屏和临时红队产物放在 `docs/` 作为当前证据。云服务器、龙芯或真实 LLM 复跑产生的结果统一写入 `acceptance-runs/`，再按最终实测结果更新本表。
 
-### 📦 交付材料（`docs/_evidence/`）
-
-| 材料 | 文件 | 说明 |
-|------|------|------|
-| 演示 PPT (.pptx) | `docs/_evidence/OpsGuard-演示PPT.pptx` | 13 页，pptxgenjs 生成，深海军蓝主题 |
-| 演示 PPT (HTML) | `docs/_evidence/OpsGuard-瑞士风PPT.html` | 10 页瑞士风，浏览器直接打开 |
-| Grafana 实景看板 | `docs/_evidence/grafana-screenshot.png` | Prometheus 实数据，6 面板 |
-| JaCoCo 覆盖率 | `docs/_evidence/jacoco-overview.png` | 14 个包覆盖率明细 |
-| 红蓝对抗指标 | `docs/_evidence/redteam-metrics.png` | 4 指标全绿 |
-| 演示录屏 | `docs/_evidence/demo.cast` | asciinema 终端录屏 |
-| 在线演示 | https://asciinema.org/a/l3xgq0gG6mENBG85dfCKsMrKq | 浏览器可播放 |
-
-### 📁 验收证据索引
+### 📁 当前可复跑证据索引
 
 | 证据 | 路径 |
 |---|---|
-| 本地测评报告（单测 / 覆盖率 / 红蓝 / RCA 实跑记录） | `docs/17-本地测评报告.md` |
-| 红蓝对抗注入语料（48 条，可复跑） | `backend/src/test/resources/redteam/injection-corpus.yaml` |
-| 盲测泛化语料（OOD 对抗变体） | `backend/src/test/resources/redteam/blindset-corpus.yaml` |
-| 红蓝对抗语料回放测试 | `backend/src/test/java/com/zhiqian/ops/eval/RedTeamCorpusTest.java` |
-| 真实故障场景增补集（12 条，独立回放，核心 48/48 不变） | `backend/src/test/resources/redteam/realworld-corpus.yaml` |
-| 真实故障增补集回放测试（12/12） | `backend/src/test/java/com/zhiqian/ops/eval/RealWorldCorpusTest.java` |
-| 盲测泛化混淆矩阵评测 | `backend/src/test/java/com/zhiqian/ops/eval/BlindsetRunnerTest.java` |
-| 安全护栏确定性回放测试（33 例） | `backend/src/test/java/com/zhiqian/ops/eval/ScenarioEvaluationTest.java` |
-| 跨源 RCA 六类故障注入证据（OOM / DISK_FULL / IO / 依赖雪崩 / 网络分区 / 配置漂移） | `rca-evidence/*.json` |
-| MCP 协议合规验证报告（MCP-01~08） | `docs/MCP协议合规验证报告.md` |
-| 历史云服务器部署验收测试报告（19/19） | `docs/云服务器部署验收测试报告.md` |
-| Grafana 可观测看板（6 面板） | `deploy/grafana/opsguard-dashboard.json` |
+| 全量单元/集成测试 | `mvn -B -f backend/pom.xml test` |
+| LoongArch / Ubuntu / Kylin 全功能验收脚本 | `scripts/loongarch-full-acceptance.sh` |
+| 录屏式验收脚本 | `scripts/run-acceptance-recorded.sh` |
+| 真实 LLM 红队脚本 | `scripts/redteam-real-llm.py` |
+| 多轮稳定性脚本 | `scripts/redteam-multi-round.py` |
+| 红蓝对抗注入语料 | `backend/src/test/resources/redteam/injection-corpus.yaml` |
+| 盲测泛化语料 | `backend/src/test/resources/redteam/blindset-corpus.yaml` |
+| 真实故障场景增补集 | `backend/src/test/resources/redteam/realworld-corpus.yaml` |
+| MCP 变更工具回归 | `backend/src/test/java/com/zhiqian/ops/mcp/McpMutatingToolsTest.java` |
+| Trace 轮转与重启回扫 | `backend/src/test/java/com/zhiqian/ops/trace/TraceRotationTest.java` / `TraceReloadTest.java` |
+| Grafana 可观测看板 | `deploy/grafana/opsguard-dashboard.json` |
 | auditd 关键路径取证参考规则 | `deploy/auditd-rules.conf` |
-| CI 工程化（语料回放 + 覆盖率门禁） | `.github/workflows/ci.yml` |
-| 一键验收脚本 | `verify.sh` |
+| CI 工程化 | `.github/workflows/ci.yml` |
 
 ## 4. 技术栈
 
@@ -241,7 +228,7 @@ mvn -P mutation org.pitest:pitest-maven:mutationCoverage
 | 8 | 演示 PPT 大纲 | `docs/08-演示PPT大纲.md` |
 | 9 | 演示视频脚本（≤7min） | `docs/09-演示视频脚本.md` |
 
-> 增强阶段新增文档见 `docs/`（红蓝对抗注入看板设计、执行兜底与回滚、MCP 协议合规验证报告、云服务器部署验收测试报告、红蓝对抗语料与CI工程化、决赛差异化与答辩Q&A、本地测评报告、泛化评测方法学、已知限制与演进路线 等）。
+> 增强阶段保留的设计与方法学文档见 `docs/`；过期验收归档和临时证据产物已从当前交付文档集中移除，后续实测输出统一进入 `acceptance-runs/`。
 
 ## 8. 著作权
 

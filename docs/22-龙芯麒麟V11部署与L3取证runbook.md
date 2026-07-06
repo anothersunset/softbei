@@ -59,7 +59,7 @@ nohup java -jar target/*.jar > /tmp/opsguard.log 2>&1 &
 curl -sf http://127.0.0.1:8080/api/ops/runtime && echo OK
 ```
 
-> 顺带验证：去掉 `-DskipTests` 跑全量可证明 **190 单测在 LoongArch 全绿**（国产化适配加分项）。
+> 顺带验证：去掉 `-DskipTests` 跑全量可证明当前 **281 项后端回归** 在 LoongArch 全绿（国产化适配加分项；以龙芯机器实跑输出为准）。
 
 ## 4. L3 证据取证
 

@@ -909,13 +909,13 @@ public class MockitoCoverageTest {
         @Test
         void isRealAndProviderName() {
             LlmProperties props = new LlmProperties();
-            props.setProvider("xiaomi");
+            props.setProvider("deepseek");
             props.setBaseUrl("https://api.test.com");
             props.setApiKey("sk-test");
             props.setTimeoutSeconds(10);
             DeepSeekLlmClient client = new DeepSeekLlmClient(props);
             assertTrue(client.isReal());
-            assertEquals("xiaomi", client.providerName());
+            assertEquals("deepseek", client.providerName());
         }
 
         @Test
