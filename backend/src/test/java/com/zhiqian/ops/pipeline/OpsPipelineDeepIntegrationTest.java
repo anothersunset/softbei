@@ -13,6 +13,8 @@ import com.zhiqian.ops.guard.PromptInjectionDetector;
 import com.zhiqian.ops.guard.RiskRuleLoader;
 import com.zhiqian.ops.guard.SensitiveDataSanitizer;
 import com.zhiqian.ops.llm.MockLlmClient;
+import com.zhiqian.ops.mcp.McpDispatcher;
+import com.zhiqian.ops.agent.ToolRegistry;
 import com.zhiqian.ops.retriever.ContextRetriever;
 import com.zhiqian.ops.trace.OpsAuditService;
 import com.zhiqian.ops.web.ApiSecurityProperties;
@@ -131,7 +133,8 @@ class OpsPipelineDeepIntegrationTest {
                 List.of(new FakeSenseTool()),
                 new ContextRetriever(audit, rules),
                 execProps,
-                sanitizer);
+                sanitizer,
+                new McpDispatcher(new ToolRegistry(List.of(new FakeSenseTool())), sanitizer));
 
         return new OpsAgentController(pipeline, List.of(new FakeSenseTool()), new RollbackLedger(), executor,
                 new MockLlmClient(), execProps, new ApiSecurityProperties(),

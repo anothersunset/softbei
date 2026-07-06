@@ -149,6 +149,113 @@ public class ExecutionPlanner {
         }
     }
 
+    /**
+     * 为已真实执行的变更命令派生只读复核探针（VERIFY 闭环）。
+     * 探针由固定模板构造且入参经严格字符校验，全部只读，由执行节点直接以 runReadOnly 运行。
+     * @return 无法派生时返回 null（保持原有"等待分析阶段"行为）。
+     */
+    public VerifySpec deriveVerification(String changeCommand) {
+        if (changeCommand == null || changeCommand.isBlank()) return null;
+        String[] t = changeCommand.trim().split("\\s+");
+        if (t.length < 2) return null;
+        String bin = baseName(t[0]);
+        switch (bin) {
+            case "systemctl" -> {
+                if (t.length >= 3 && isSafeToken(t[2])) {
+                    String action = t[1];
+                    String unit = t[2];
+                    if (List.of("start", "restart", "reload", "unmask", "enable").contains(action)) {
+                        return new VerifySpec(List.of("systemctl", "is-active", unit),
+                                "exit0", "服务 " + unit + " 应处于 active 状态");
+                    }
+                    if (List.of("stop", "mask", "disable").contains(action)) {
+                        return new VerifySpec(List.of("systemctl", "is-active", unit),
+                                "nonzero", "服务 " + unit + " 应已停止（is-active 非零退出）");
+                    }
+                }
+            }
+            case "rm" -> {
+                String path = lastPathArg(t);
+                if (path != null) {
+                    return new VerifySpec(List.of("stat", path), "nonzero", "文件 " + path + " 应已删除");
+                }
+            }
+            case "truncate", "chmod", "chown", "chgrp", "tee" -> {
+                String path = lastPathArg(t);
+                if (path != null) {
+                    return new VerifySpec(List.of("stat", path), "exit0", "目标 " + path + " 应存在且状态可查");
+                }
+            }
+            case "mv" -> {
+                String dst = lastPathArg(t);
+                if (dst != null) {
+                    return new VerifySpec(List.of("stat", dst), "exit0", "目标 " + dst + " 应已就位");
+                }
+            }
+            case "kill" -> {
+                String pid = t[t.length - 1];
+                if (pid.matches("\\d+")) {
+                    return new VerifySpec(List.of("ps", "-p", pid), "nonzero", "进程 " + pid + " 应已退出");
+                }
+            }
+            default -> { }
+        }
+        return null;
+    }
+
+    /** 将复核结果回填 VERIFY 任务状态：全部通过 -> VERIFIED，任一失败 -> VERIFY_FAILED（挂回滚提示）。 */
+    public void applyVerification(OpsExecutionPlan plan, List<Map<String, Object>> verifications) {
+        if (plan == null || verifications == null || verifications.isEmpty()) return;
+        for (OpsTask task : plan.getTasks()) {
+            if (!"VERIFY".equals(task.getPhase())) continue;
+            int passed = 0;
+            List<String> failures = new ArrayList<>();
+            for (Map<String, Object> v : verifications) {
+                if (Boolean.TRUE.equals(v.get("passed"))) {
+                    passed++;
+                } else {
+                    failures.add(String.valueOf(v.getOrDefault("expectation", v.get("verifyCommand"))));
+                }
+            }
+            if (failures.isEmpty()) {
+                task.setStatus("VERIFIED");
+                task.setResultSummary("闭环复核通过：" + passed + "/" + verifications.size() + " 项验证符合预期。");
+            } else {
+                task.setStatus("VERIFY_FAILED");
+                task.setResultSummary("复核未达预期（" + passed + "/" + verifications.size() + " 通过）："
+                        + String.join("；", failures)
+                        + "。可查看回滚账本获取补偿指令（/api/ops/rollback/{traceId}）。");
+            }
+        }
+    }
+
+    /** 复核探针定义：argv 形式的只读命令 + 通过条件（exit0 / nonzero）+ 人读预期。 */
+    public record VerifySpec(List<String> argv, String expect, String expectation) {
+        public boolean passed(int exitCode) {
+            return "nonzero".equals(expect) ? exitCode != 0 : exitCode == 0;
+        }
+    }
+
+    private String lastPathArg(String[] tokens) {
+        for (int i = tokens.length - 1; i >= 1; i--) {
+            String tok = tokens[i];
+            if (tok.startsWith("/") && isSafeToken(tok)) {
+                return tok;
+            }
+        }
+        return null;
+    }
+
+    /** 探针入参白名单字符校验：防止把元字符/空白注入到模板命令。 */
+    private boolean isSafeToken(String s) {
+        return s != null && !s.isBlank() && s.matches("[A-Za-z0-9._/@:-]+");
+    }
+
+    private String baseName(String bin) {
+        int idx = bin.lastIndexOf('/');
+        return idx >= 0 ? bin.substring(idx + 1) : bin;
+    }
+
     private String summary(String instruction, List<PlanStep> steps) {
         String subject = safe(instruction).isBlank() ? "当前运维请求" : safe(instruction);
         return "将“" + trim(subject, 48) + "”拆解为 " + steps.size() + " 条候选命令，并按证据采集、受控处置、复核闭环串行推进。";

@@ -106,29 +106,21 @@ public class McpDispatcher {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", false)));
         result.put("serverInfo", Map.of("name", "OpsGuard-MCP", "version", "1.0.0"));
         result.put("instructions",
-                "OpsGuard 运维工具服务端：所有工具均为只读感知/巡检能力，不会触发任何系统变更；"
-                        + "变更类操作请走 /api/ops/chat 的安全护栏与人工确认流程。");
+                "OpsGuard 运维工具服务端：感知/巡检类工具（annotations.readOnlyHint=true）为只读采集，可直接调用；"
+                        + "变更类工具（annotations.readOnlyHint=false，如 log_rotate/service_restart/config_backup）"
+                        + "内置安全闭环——每次调用先经意图风险护栏裁决（红线直接拒绝，confirm 也无法越过），"
+                        + "需审批操作必须携带 confirm=true 二次确认；真实执行前自动备份目标文件并登记回滚账本"
+                        + "（POST /api/ops/rollback/{traceId} 一键回滚），全程按 traceId 溯源审计；"
+                        + "默认 dry-run 演示模式不真实落盘变更。");
         return result;
     }
 
     private Map<String, Object> toolsList() {
         List<McpToolSpec> specs = new ArrayList<>();
         for (AgentTool t : registry.all()) {
-            // 当前所有工具均无入参(只读感知/巡检)，inputSchema 为不含属性的 object。
-            Map<String, Object> inputSchema = new LinkedHashMap<>();
-            inputSchema.put("type", "object");
-            inputSchema.put("properties", Map.of());
-            inputSchema.put("additionalProperties", false);
-
-            // ToolAnnotations：全部工具只读、非破坏性、幂等，仅作用于本机受控主机。
-            Map<String, Object> annotations = new LinkedHashMap<>();
-            annotations.put("title", t.name());
-            annotations.put("readOnlyHint", true);
-            annotations.put("destructiveHint", false);
-            annotations.put("idempotentHint", true);
-            annotations.put("openWorldHint", false);
-
-            specs.add(new McpToolSpec(t.name(), t.description(), inputSchema, annotations));
+            // inputSchema 与 annotations 均由工具自身声明：
+            // 感知/巡检类默认只读注解；变更类（MutatingTool）声明 readOnlyHint=false 等破坏性提示。
+            specs.add(new McpToolSpec(t.name(), t.description(), t.inputSchema(), t.annotations()));
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("tools", specs);

@@ -19,11 +19,30 @@ public class LlmClientFactory {
                 && !"mock".equalsIgnoreCase(props.getProvider())
                 && props.getApiKey() != null
                 && !props.getApiKey().isBlank();
-        if (wantReal) {
-            log.info("using real LLM client: provider={}, model={}", props.getProvider(), props.getModel());
-            return new DeepSeekLlmClient(props);
+        if (!wantReal) {
+            log.info("using mock LLM client (no api-key configured or provider=mock)");
+            return new MockLlmClient();
         }
-        log.info("using mock LLM client (no api-key configured or provider=mock)");
-        return new MockLlmClient();
+
+        // 主备自动切换链：主模型 →（可选）备用模型 → Mock 兜底，服务不因模型不可用而中断。
+        java.util.List<LlmClient> chain = new java.util.ArrayList<>();
+        chain.add(new DeepSeekLlmClient(props));
+        if (props.getFallbackProvider() != null && !props.getFallbackProvider().isBlank()
+                && props.getFallbackApiKey() != null && !props.getFallbackApiKey().isBlank()) {
+            LlmProperties fb = new LlmProperties();
+            fb.setProvider(props.getFallbackProvider());
+            fb.setBaseUrl(props.getFallbackBaseUrl() == null || props.getFallbackBaseUrl().isBlank()
+                    ? props.getBaseUrl() : props.getFallbackBaseUrl());
+            fb.setModel(props.getFallbackModel() == null || props.getFallbackModel().isBlank()
+                    ? props.getModel() : props.getFallbackModel());
+            fb.setApiKey(props.getFallbackApiKey());
+            fb.setTimeoutSeconds(props.getTimeoutSeconds());
+            chain.add(new DeepSeekLlmClient(fb));
+            log.info("llm failover chain: {} -> {} -> mock", props.getProvider(), fb.getProvider());
+        } else {
+            log.info("llm failover chain: {} -> mock", props.getProvider());
+        }
+        chain.add(new MockLlmClient());
+        return new FailoverLlmClient(chain, props.getFailoverCooldownMs());
     }
 }

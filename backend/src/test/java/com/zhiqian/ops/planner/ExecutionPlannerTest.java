@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecutionPlannerTest {
@@ -53,6 +55,68 @@ class ExecutionPlannerTest {
                 Map.of("executed", true, "dryRun", true)));
 
         assertEquals("DRY_RUN_EXECUTED", change.getStatus());
+    }
+
+    @Test
+    void derives_readonly_verification_probes_from_change_commands() throws Exception {
+        ExecutionPlanner planner = new ExecutionPlanner(new IntentRiskGuard(new RiskRuleLoader()));
+
+        ExecutionPlanner.VerifySpec restart = planner.deriveVerification("systemctl restart nginx");
+        assertEquals(List.of("systemctl", "is-active", "nginx"), restart.argv());
+        assertTrue(restart.passed(0));
+        assertFalse(restart.passed(3));
+
+        ExecutionPlanner.VerifySpec stop = planner.deriveVerification("systemctl stop nginx");
+        assertEquals(List.of("systemctl", "is-active", "nginx"), stop.argv());
+        assertTrue(stop.passed(3));
+        assertFalse(stop.passed(0));
+
+        ExecutionPlanner.VerifySpec rm = planner.deriveVerification("rm -f /var/log/app/app.log.1");
+        assertEquals(List.of("stat", "/var/log/app/app.log.1"), rm.argv());
+        assertTrue(rm.passed(1));
+
+        ExecutionPlanner.VerifySpec kill = planner.deriveVerification("kill -TERM 4321");
+        assertEquals(List.of("ps", "-p", "4321"), kill.argv());
+        assertTrue(kill.passed(1));
+
+        ExecutionPlanner.VerifySpec mv = planner.deriveVerification("mv /tmp/a.conf /tmp/b.conf");
+        assertEquals(List.of("stat", "/tmp/b.conf"), mv.argv());
+        assertTrue(mv.passed(0));
+
+        // 无法派生（未知命令 / 含不安全字符的单元名）时返回 null，保持原有行为
+        assertNull(planner.deriveVerification("echo hello"));
+        assertNull(planner.deriveVerification("systemctl restart 'nginx;rm'"));
+    }
+
+    @Test
+    void applies_verification_results_to_verify_task_status() throws Exception {
+        ExecutionPlanner planner = new ExecutionPlanner(new IntentRiskGuard(new RiskRuleLoader()));
+        PlanResult plan = new PlanResult();
+        plan.setSteps(List.of(new PlanStep("systemctl restart nginx", "restart service")));
+        OpsExecutionPlan executionPlan = planner.build("重启 nginx", plan, List.of());
+        OpsTask verify = executionPlan.getTasks().stream()
+                .filter(t -> "VERIFY".equals(t.getPhase())).findFirst().orElseThrow();
+
+        planner.applyVerification(executionPlan, List.of(
+                Map.of("command", "systemctl restart nginx",
+                        "verifyCommand", "systemctl is-active nginx",
+                        "expectation", "服务 nginx 应处于 active 状态",
+                        "exitCode", 0, "passed", true)));
+        assertEquals("VERIFIED", verify.getStatus());
+        assertTrue(verify.getResultSummary().contains("1/1"));
+
+        planner.applyVerification(executionPlan, List.of(
+                Map.of("command", "systemctl restart nginx",
+                        "verifyCommand", "systemctl is-active nginx",
+                        "expectation", "服务 nginx 应处于 active 状态",
+                        "exitCode", 3, "passed", false)));
+        assertEquals("VERIFY_FAILED", verify.getStatus());
+        assertTrue(verify.getResultSummary().contains("回滚"));
+
+        // 空复核结果不得触碰任务状态（dry-run / mock 路径口径不变）
+        verify.setStatus("PLANNED");
+        planner.applyVerification(executionPlan, List.of());
+        assertEquals("PLANNED", verify.getStatus());
     }
 
     @Test

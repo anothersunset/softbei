@@ -133,7 +133,7 @@ jobs:
           check "dd block-device write"  'dd\\.*of=/'
           check "kill SIGKILL PID 1"     'SIGKILL.*1\\\\b'
           check "shutdown/reboot"        'shutdown.*reboot.*halt'
-          check "fork bomb"              'Fork.*炸|bomb'
+          check "fork bomb"              'Fork.*炸\|bomb'
           check "mkfs"                   'mkfs'
           check "chmod 777 /"            'chmod.*777.*/'
           check "disregard previous"     'disregard.*previous'
@@ -141,7 +141,7 @@ jobs:
           check "debug mode"             'debug.*mode'
           check "override safety"        'override.*safety'
           check "CISO bypass"            'CISO'
-          check "urgent/severe bypass"   'sev-?1.*urgent|emergency'
+          check "urgent/severe bypass"   'urgent\|emergency\|sev-'
           check "critical services"      'criticalServices'
           check "sensitive patterns"     'sensitivePatterns'
           [ "$errors" -eq 0 ] && echo "OK: all critical patterns present" && exit 0

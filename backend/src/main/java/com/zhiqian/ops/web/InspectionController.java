@@ -66,7 +66,20 @@ public class InspectionController {
         if (llmSummary != null && !llmSummary.isBlank()) {
             out.put("llmSummary", llmSummary);
             out.put("llmProvider", llmSummarizer.providerName());
+        } else if (llmSummarizer.enabled()) {
+            out.put("llmSummary", fallbackRcaSummary(report, rca));
+            out.put("llmProvider", llmSummarizer.providerName());
+            out.put("llmSummaryDegraded", true);
         }
         return out;
+    }
+
+    private String fallbackRcaSummary(InspectionReport report, RcaResult rca) {
+        String level = rca == null ? "UNKNOWN" : rca.overallLevel();
+        int score = report == null ? -1 : report.healthScore();
+        String overall = report == null ? "UNKNOWN" : report.overall();
+        return "真实模型摘要暂不可用，已返回规则化 RCA 摘要：处置等级 " + level
+                + "，健康评分 " + score + "，总体状态 " + overall
+                + "。请优先查看 rca.insights 中的跨源证据和处置等级。";
     }
 }
