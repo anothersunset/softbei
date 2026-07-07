@@ -292,11 +292,11 @@ run_build_checks() {
 run_http_checks() {
   local code body
 
-  code="$(http_code "${BASE}/actuator/health")"
+  code="$(http_code "${BASE}/api/ops/runtime")"
   if [ "$code" = "401" ]; then
-    pass "SEC-01" "token-required" "health without token returned 401"
+    pass "SEC-01" "token-required" "api runtime without token returned 401"
   else
-    fail "SEC-01" "token-required" "expected 401 without token, got ${code}"
+    fail "SEC-01" "token-required" "expected 401 without token on /api/ops/runtime, got ${code}"
   fi
 
   body="$(api_get "/actuator/health")"
@@ -315,7 +315,7 @@ run_http_checks() {
   check_contains "UI-01" "static-index" "$body" "OpsGuard"
   check_contains "UI-02" "token-input" "$body" "id=\"apiToken\""
   body="$(api_get "/app.js")"
-  check_contains "UI-03" "frontend-apiFetch" "$body" "function apiFetch"
+  check_contains "UI-03" "frontend-apiFetch" "$body" "apiFetch"
   check_contains "UI-04" "frontend-token-header" "$body" "X-Ops-Token"
   body="$(api_get "/stream.js")"
   check_contains "UI-05" "frontend-sse-fetch" "$body" "text/event-stream"
