@@ -92,6 +92,10 @@ STRICT_ENV="${STRICT_ENV:-0}"
 CURL_TIMEOUT="${CURL_TIMEOUT:-45}"
 JAVA_OPTS="${JAVA_OPTS:--Xmx768m}"
 TOKEN="${OPS_API_TOKEN:-}"
+# 默认关闭：不改变既有"解压离线包直接跑"的用法。显式设 SYNC_GIT=1 才会在跑测试前
+# 从 GitHub 拉取最新 main，免去每次改动都要重新打包上传的麻烦。
+SYNC_GIT="${SYNC_GIT:-0}"
+SYNC_BRANCH="${SYNC_BRANCH:-main}"
 
 PASS=0
 FAIL=0
@@ -200,6 +204,35 @@ require_cmd() {
     pass "$id" "command:$cmd" "$(command -v "$cmd")"
   else
     fail "$id" "command:$cmd" "missing"
+  fi
+}
+
+git_sync_check() {
+  if [ "$SYNC_GIT" != "1" ]; then
+    skip "GIT-SYNC" "pull-latest" "SYNC_GIT=0（默认离线包模式，不自动拉取；设 SYNC_GIT=1 启用）"
+    return 0
+  fi
+  if [ ! -d "$REPO_ROOT/.git" ]; then
+    skip "GIT-SYNC" "pull-latest" "$REPO_ROOT 不是 git 仓库（离线包部署），请先手动执行一次 git clone https://github.com/anothersunset/softbei.git"
+    return 0
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    skip "GIT-SYNC" "pull-latest" "未找到 git 命令"
+    return 0
+  fi
+  if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]; then
+    skip "GIT-SYNC" "pull-latest" "工作区有未提交改动，为避免覆盖本地修改已跳过自动拉取"
+    return 0
+  fi
+  local before after
+  before="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  if git -C "$REPO_ROOT" fetch origin "$SYNC_BRANCH" >/dev/null 2>&1 \
+      && git -C "$REPO_ROOT" checkout "$SYNC_BRANCH" >/dev/null 2>&1 \
+      && git -C "$REPO_ROOT" pull --ff-only origin "$SYNC_BRANCH" >/dev/null 2>&1; then
+    after="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    pass "GIT-SYNC" "pull-latest" "$before -> $after（分支 $SYNC_BRANCH）"
+  else
+    fail "GIT-SYNC" "pull-latest" "git fetch/checkout/pull 失败，继续用当前已检出代码测试（$before）"
   fi
 }
 
@@ -921,6 +954,8 @@ main() {
   echo "Repo root: $REPO_ROOT"
   echo "Report dir: $REPORT_DIR"
   echo "Base URL: $BASE"
+
+  git_sync_check
 
   layout_check || {
     echo "Layout validation failed; see report."
