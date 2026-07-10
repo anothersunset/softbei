@@ -150,7 +150,13 @@ public class OpsAgentController {
                     results.add(r);
                     continue;
                 }
-                if (decision.level().requiresApproval()) {
+                // restore-backup 条目的 compensate 命令由 PreChangeBackup 自行生成（cp <受控备份路径> <原路径>），
+                // 两端路径均非模型/用户输入，且恢复目标就是此前已被批准执行过的变更命令的原路径——
+                // 属于我们完全可控的补偿动作，而非任意外部命令，因此单独放行 EXECUTABLE 级（BLOCK 仍照常拒绝，
+                // 意外升级为 IRREVERSIBLE 的情形仍需人工确认，不做无条件豁免）。
+                boolean autoRestorable = "restore-backup".equals(item.get("action"))
+                        && decision.level() == RiskLevel.EXECUTABLE;
+                if (decision.level().requiresApproval() && !autoRestorable) {
                     r.put("rolledBack", false);
                     r.put("requiresApproval", true);
                     r.put("output", "补偿命令需人工确认，请通过主运维链路执行并保留影响记录：" + decision.reason());

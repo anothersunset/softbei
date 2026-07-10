@@ -588,9 +588,18 @@ public class OpsPipeline {
                     cmds.add(step.getCommand());
                 }
                 verdict = consistencyChecker.check(String.valueOf(ctx.state().get("instruction")), cmds);
-                if (verdict.escalated() && worst != RiskLevel.BLOCK) {
+                if (verdict.escalated()) {
                     // 检出意图偏差/幻觉/夹带：强制升级为不可逆级，落入人工确认闸门。
-                    worst = RiskLevel.max(worst, RiskLevel.IRREVERSIBLE);
+                    // 关键：必须逐条重写 decisions 本身（而不仅是聚合的 worst），
+                    // 否则 ExecuteNode 按每条 RiskDecision 自己的 level 放行时，
+                    // 仍会在响应被判定为 REVIEW_PENDING 之前，把已被判 READONLY 的越权命令执行掉。
+                    for (int i = 0; i < decisions.size(); i++) {
+                        decisions.set(i, escalateForIntentConcern(decisions.get(i), verdict.concern()));
+                    }
+                    worst = RiskLevel.READONLY;
+                    for (RiskDecision d : decisions) {
+                        worst = RiskLevel.max(worst, d.level());
+                    }
                 }
             }
 
@@ -611,6 +620,26 @@ public class OpsPipeline {
             out.put("executionPlan", executionPlan);
             return out;
         }
+    }
+
+    /**
+     * 将单条裁决升级到 IRREVERSIBLE（人工确认闸门），供意图交叉校验检出偏差时使用。
+     * BLOCK 保持不变（已是最高裁决，不可能也不需要被"升级"改写）；
+     * READONLY/EXECUTABLE 一律提升到 IRREVERSIBLE，确保 ExecuteNode 逐条放行时不再遗漏。
+     */
+    private RiskDecision escalateForIntentConcern(RiskDecision d, String concern) {
+        if (d.level() == RiskLevel.BLOCK || d.level() == RiskLevel.IRREVERSIBLE) {
+            return d;
+        }
+        List<String> reasons = new ArrayList<>(d.reasons());
+        reasons.add("意图交叉校验检出偏差，强制升级人工确认："
+                + (concern == null || concern.isBlank() ? "候选命令可能偏离用户原始诉求" : concern));
+        List<String> matchedRules = new ArrayList<>(d.matchedRules());
+        matchedRules.add("intentEscalation");
+        return new RiskDecision(d.command(), RiskLevel.IRREVERSIBLE,
+                RiskDecision.actionFor(RiskLevel.IRREVERSIBLE),
+                true, true, true,
+                matchedRules, reasons, d.saferAlternative(), d.normalizedInput(), d.originalInputHash());
     }
 
     private class ExecuteNode implements AgentNode {
