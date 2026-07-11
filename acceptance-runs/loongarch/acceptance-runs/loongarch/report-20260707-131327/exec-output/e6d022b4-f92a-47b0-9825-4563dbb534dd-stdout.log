@@ -1,0 +1,8 @@
+State  Recv-Q Send-Q      Local Address:Port  Peer Address:PortProcess                            
+LISTEN 0      32                0.0.0.0:5903       0.0.0.0:*    users:(("x11vnc",pid=3855,fd=8))  
+LISTEN 0      128               0.0.0.0:22         0.0.0.0:*                                      
+LISTEN 0      10                0.0.0.0:2135       0.0.0.0:*                                      
+LISTEN 0      32                   [::]:5900          [::]:*    users:(("x11vnc",pid=3855,fd=9))  
+LISTEN 0      32                   [::]:5903          [::]:*    users:(("x11vnc",pid=3855,fd=10)) 
+LISTEN 0      100    [::ffff:127.0.0.1]:18080            *:*    users:(("java",pid=1062294,fd=11))
+LISTEN 0      128                  [::]:22            [::]:*                                      
