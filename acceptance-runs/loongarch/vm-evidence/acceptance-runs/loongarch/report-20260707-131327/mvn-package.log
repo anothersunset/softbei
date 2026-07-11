@@ -1,0 +1,40 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------------< com.zhiqian:ops-agent >------------------------
+[INFO] Building OpsGuard Agent 1.0.0
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- jacoco-maven-plugin:0.8.12:prepare-agent (jacoco-prepare-agent) @ ops-agent ---
+[INFO] argLine set to -javaagent:/home/vmuser/.m2/repository/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=/home/vmuser/softbei-main-latest/softbei-main/backend/target/jacoco.exec
+[INFO] 
+[INFO] --- maven-resources-plugin:3.3.1:resources (default-resources) @ ops-agent ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 11 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.13.0:compile (default-compile) @ ops-agent ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- maven-resources-plugin:3.3.1:testResources (default-testResources) @ ops-agent ---
+[INFO] Copying 5 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.13.0:testCompile (default-testCompile) @ ops-agent ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- maven-surefire-plugin:3.2.5:test (default-test) @ ops-agent ---
+[INFO] Tests are skipped.
+[INFO] 
+[INFO] --- jacoco-maven-plugin:0.8.12:report (jacoco-report) @ ops-agent ---
+[INFO] Loading execution data file /home/vmuser/softbei-main-latest/softbei-main/backend/target/jacoco.exec
+[INFO] Analyzed bundle 'OpsGuard Agent' with 120 classes
+[INFO] 
+[INFO] --- maven-jar-plugin:3.4.2:jar (default-jar) @ ops-agent ---
+[INFO] 
+[INFO] --- spring-boot-maven-plugin:3.3.4:repackage (repackage) @ ops-agent ---
+[INFO] Replacing main artifact /home/vmuser/softbei-main-latest/softbei-main/backend/target/ops-agent.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+[INFO] The original artifact has been renamed to /home/vmuser/softbei-main-latest/softbei-main/backend/target/ops-agent.jar.original
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  4.113 s
+[INFO] Finished at: 2026-07-07T13:14:13+08:00
+[INFO] ------------------------------------------------------------------------
