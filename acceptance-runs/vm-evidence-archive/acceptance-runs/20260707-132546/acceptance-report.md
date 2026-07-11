@@ -108,17 +108,5 @@
 | B3-01 | danger-safety-after-real | PASS | status=BLOCKED |
 | C1-01 | one-command-entrypoint | PASS | scripts/run-acceptance-recorded.sh |
 | C1-02 | report-directory-created | PASS | /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546 |
-| C1-03 | terminal-recording-configured | SKIP | recording not available in current non-interactive run |
-| C1-04 | structured-check-log | PASS | /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/checks.jsonl |
-| C1-05 | app-log-captured | PASS | /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/ops-agent.log |
-
-## Artifacts
-
-- Summary JSON: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/summary.json
-- Check JSONL: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/checks.jsonl
-- App log: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/ops-agent.log
-- Trace file: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/ops-trace.jsonl
-- Exec output dir: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output
-- Runtime state dir: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/runtime/state
-- API artifacts dir: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/artifacts
-- Terminal recording: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/terminal.typescript
+| C1-03 | terminal-recording-configured | 
+... (truncated)
