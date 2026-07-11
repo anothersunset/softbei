@@ -1,0 +1,183 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "traceId": "56837c12-3256-4c54-9446-721b96c535d9",
+      "instruction": "[主动巡检] 系统健康体检",
+      "startEpochMs": 1783401984951,
+      "finalStatus": "WARNING",
+      "steps": [
+        {
+          "stage": "INSPECT",
+          "agentName": "ProactiveInspector",
+          "input": {
+            "checks": [
+              "df -P",
+              "free",
+              "uptime + nproc",
+              "ps -eo stat",
+              "ss -H -tuln",
+              "journalctl -p 3 -n 200 -o short-iso"
+            ]
+          },
+          "output": {
+            "healthScore": 80,
+            "overall": "WARNING",
+            "findings": 6,
+            "predictions": 2
+          },
+          "model": "rule-based",
+          "confidence": 1.0,
+          "elapsedMs": 79,
+          "tokenIn": 0,
+          "tokenOut": 0,
+          "status": "WARNING"
+        }
+      ]
+    },
+    {
+      "traceId": "6ac8bbd3-5b3d-4fae-855e-a90be8eb2d17",
+      "instruction": "[主动巡检] 系统健康体检",
+      "startEpochMs": 1783401983775,
+      "finalStatus": "WARNING",
+      "steps": [
+        {
+          "stage": "INSPECT",
+          "agentName": "ProactiveInspector",
+          "input": {
+            "checks": [
+              "df -P",
+              "free",
+              "uptime + nproc",
+              "ps -eo stat",
+              "ss -H -tuln",
+              "journalctl -p 3 -n 200 -o short-iso"
+            ]
+          },
+          "output": {
+            "healthScore": 80,
+            "overall": "WARNING",
+            "findings": 6,
+            "predictions": 2
+          },
+          "model": "rule-based",
+          "confidence": 1.0,
+          "elapsedMs": 136,
+          "tokenIn": 0,
+          "tokenOut": 0,
+          "status": "WARNING"
+        }
+      ]
+    },
+    {
+      "traceId": "37684927-43c9-4347-9021-2dda0daf524f",
+      "instruction": "[主动巡检] 系统健康体检",
+      "startEpochMs": 1783401983496,
+      "finalStatus": "WARNING",
+      "steps": [
+        {
+          "stage": "INSPECT",
+          "agentName": "ProactiveInspector",
+          "input": {
+            "checks": [
+              "df -P",
+              "free",
+              "uptime + nproc",
+              "ps -eo stat",
+              "ss -H -tuln",
+              "journalctl -p 3 -n 200 -o short-iso"
+            ]
+          },
+          "output": {
+            "healthScore": 80,
+            "overall": "WARNING",
+            "findings": 6,
+            "predictions": 0
+          },
+          "model": "rule-based",
+          "confidence": 1.0,
+          "elapsedMs": 171,
+          "tokenIn": 0,
+          "tokenOut": 0,
+          "status": "WARNING"
+        }
+      ]
+    },
+    {
+      "traceId": "33774b67-6880-48c5-94ad-9d06423df22d",
+      "instruction": "执行 systemctl restart nginx",
+      "startEpochMs": 1783401971796,
+      "finalStatus": "EXECUTED",
+      "steps": [
+        {
+          "stage": "RECEIVE",
+          "agentName": "ReceiveAgent",
+          "input": {},
+          "output": {
+            "instruction": "执行 systemctl restart nginx"
+          },
+          "model": null,
+          "confidence": null,
+          "elapsedMs": 0,
+          "tokenIn": null,
+          "tokenOut": null,
+          "status": "ok"
+        },
+        {
+          "stage": "INJECTION_GUARD",
+          "agentName": "PromptInjectionDetector",
+          "input": {},
+          "output": {
+            "blocked": false,
+            "matchedPatterns": []
+          },
+          "model": null,
+          "confidence": null,
+          "elapsedMs": 0,
+          "tokenIn": null,
+          "tokenOut": null,
+          "status": "ok"
+        },
+        {
+          "stage": "SENSE",
+          "agentName": "EnvironmentSensor",
+          "input": {},
+          "output": {
+            "mode": "full",
+            "toolsRun": 7,
+            "sensed": {
+              "db_sense": {
+                "engine": "auto",
+                "redis": {
+                  "processUp": true,
+                  "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/9818ccf8-c862-49f5-b52b-9abec1fb6a7c-stdout.log",
+                  "listenPort": 6379,
+                  "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/5b74d7b9-36fe-4af5-bfaa-28141d2682f4-stdout.log",
+                  "establishedConnections": 2
+                },
+                "mysql": {
+                  "processUp": true,
+                  "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/71684c30-ae5d-4175-bf4a-a18eca023c78-stdout.log",
+                  "listenPort": 3306,
+                  "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/60d05347-6a7f-4a1e-a511-7ae59816daf6-stdout.log",
+                  "establishedConnections": 2
+                },
+                "postgresql": {
+                  "processUp": true,
+                  "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/d0ec32a7-90b6-47c4-a37b-3aa06699616d-stdout.log",
+                  "listenPort": 5432,
+                  "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/da077235-3d8d-4e80-94d2-84a76c03739d-stdout.log",
+                  "establishedConnections": 2
+                }
+              },
+              "disk_sense": {
+                "df": "文件系统               大小  已用  可用 已用% 挂载点\n/dev/mapper/klas-root   93G   11G   83G   11% /\ndevtmpfs               4.0M     0  4.0M    0% /dev\ntmpfs                  5.7G   46M  5.6G    1% /dev/shm\ntmpfs                  4.0M     0  4.0M    0% /sys/fs/cgroup\nefivarfs               256K  2.7K  254K    2% /sys/firmware/efi/efivars\ntmpfs                  2.3G   49M  2.3G    3% /run\ntmpfs                  5.7G   57M  5.6G    1% /tmp\n/dev/vda2              960M  413M  548M   44% /boot\n/dev/vda1              599M   12M  588M    2% /boot/efi\ntmpfs                  1.2G  192K  1.2G    1% /run/user/1000\n\n[output-audit] 完整 626 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/41078ee4-95bd-430a-ad47-0cc3408f51fe-stdout.log",
+                "du_target": "/var/log",
+                "du": "0\t/var/log/private\n0\t/var/log/samba\n0\t/var/log/chrony\n0\t/var/log/sssd\n36K\t/var/log/lightdm\n12M\t/var/log/ksaf\n2.4M\t/var/log/sa\n32K\t/var/log/tuned\n0\t/var/log/audit\n72K\t/var/log/kylin\n6.9M\t/var/log/anaconda\n38M\t/var/log\n\n[output-audit] 完整 217 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/5637032b-cdcb-4148-b33c-c240ac05328c-stdout.log"
+              },
+              "log_sense": {
+                "scope": "system",
+                "lines": 100,
+                "journal_err": "7月 03 19:46:38 localhost rasdaemon[1046]: Can't get traces from ras:extlog_mem_event\n7月 03 19:46:47 win000k10424 lightdm[2576]: [kysdk-conf2] invalied schema id\n7月 03 19:46:47 win000k10424 lightdm[2576]: [kysdk-conf2] invalied schema id\n7月 03 19:46:48 win000k10424 ukui-login-sound[2610]: control hw:0 open error: No such file or directory\n7月 03 19:46:48 win000k10424 ukui-login-sound[2610]: file convert error, err:32512.\n7月 03 19:46:49 win000k10424 systemd[2634]: Failed to start Portal service (GTK/GNOME implementation).\n7月 03 1
+... (truncated)
