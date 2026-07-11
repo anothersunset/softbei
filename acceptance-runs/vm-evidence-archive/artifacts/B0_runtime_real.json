@@ -1,0 +1,16 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "llmProvider": "deepseek",
+    "llmReal": true,
+    "llmMode": "REAL",
+    "mockDeterministic": false,
+    "dryRun": true,
+    "maxStepsPerRequest": 20,
+    "guardMode": "rules+normalization+human-review",
+    "semanticBoundary": "LLM proposes; deterministic guards decide execution",
+    "apiTokenRequired": false,
+    "bindAddress": "127.0.0.1"
+  }
+}
