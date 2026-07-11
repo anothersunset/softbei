@@ -1,0 +1,7 @@
+2026-07-07T13:26:04.908+08:00  INFO 1066430 --- [ops-agent] [           main] com.zhiqian.ops.OpsAgentApplication      : Starting OpsAgentApplication v1.0.0 using Java 17.0.18 with PID 1066430 (/home/vmuser/softbei-main-latest/softbei-main/backend/target/ops-agent.jar started by vmuser in /home/vmuser/softbei-main-latest/softbei-main)
+2026-07-07T13:26:04.913+08:00  INFO 1066430 --- [ops-agent] [           main] com.zhiqian.ops.OpsAgentApplication      : No active profile set, falling back to 1 default profile: "default"
+2026-07-07T13:26:07.391+08:00  INFO 1066430 --- [ops-agent] [           main] com.zhiqian.ops.guard.RiskRuleLoader     : loaded risk rules: 11 blocked patterns, 16 critical paths, 13 critical services, 39 injection patterns
+2026-07-07T13:26:07.474+08:00  INFO 1066430 --- [ops-agent] [           main] com.zhiqian.ops.trace.OpsAuditService    : 断点续跑：从 logs/ops-trace.jsonl 重建 6 条溯源记录
+2026-07-07T13:26:07.780+08:00  INFO 1066430 --- [ops-agent] [           main] com.zhiqian.ops.llm.LlmClientFactory     : using mock LLM client (no api-key configured or provider=mock)
+2026-07-07T13:26:07.836+08:00  INFO 1066430 --- [ops-agent] [           main] c.z.ops.retriever.ContextRetriever       : ContextRetriever 就绪：静态知识 18 条
+2026-07-07T13:26:08.528+08:00  INFO 1066430 --- [ops-agent] [           main] com.zhiqian.ops.OpsAgentApplication      : Started OpsAgentApplication in 4.703 seconds (process running for 5.757)
