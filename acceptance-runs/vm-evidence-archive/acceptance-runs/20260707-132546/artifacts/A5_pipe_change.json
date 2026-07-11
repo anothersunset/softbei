@@ -1,0 +1,197 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "traceId": "e50285c5-6c4e-4970-8b3a-efae92677ba4",
+    "status": "REVIEW_PENDING",
+    "message": "计划中含有需人工确认的受限变更指令，请确认后重试（confirm=true）。",
+    "plan": {
+      "summary": "检测到显式管道命令，已交由安全护栏分段裁决",
+      "rootCauseHypothesis": "用户显式指定管道操作",
+      "confidence": 0.5,
+      "steps": [
+        {
+          "command": "cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt",
+          "purpose": "用户直接下达的管道命令"
+        }
+      ]
+    },
+    "executionPlan": {
+      "strategy": "Plan-and-Execute: decompose intent into evidence, action, and verification tasks; guards decide execution.",
+      "executionMode": "sequential-with-human-gates",
+      "summary": "将“执行 cat /etc/passwd | tee /tmp/opsguard-acceptanc...”拆解为 1 条候选命令，并按证据采集、受控处置、复核闭环串行推进。",
+      "commandCount": 1,
+      "tasks": [
+        {
+          "id": "T2",
+          "phase": "CHANGE",
+          "title": "受控处置",
+          "objective": "仅在护栏允许且人工确认后执行变更命令。",
+          "commands": [
+            "cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt"
+          ],
+          "commandIndexes": [
+            0
+          ],
+          "dependsOn": [],
+          "evidenceRefs": [
+            "变更类命令（EXECUTABLE / IRREVERSIBLE 需人工确认） (risk-rules.yaml)",
+            "高危阻断规则（BLOCK） (risk-rules.yaml)",
+            "麒麟高级服务器操作系统 V11 基础 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "EXECUTABLE",
+          "status": "WAITING_APPROVAL",
+          "resultSummary": "等待人工确认后执行。"
+        },
+        {
+          "id": "T3",
+          "phase": "VERIFY",
+          "title": "复核与闭环",
+          "objective": "基于执行结果、trace 与 RCA 输出复核处置是否完成。",
+          "commands": [],
+          "commandIndexes": [],
+          "dependsOn": [
+            "T2"
+          ],
+          "evidenceRefs": [
+            "变更类命令（EXECUTABLE / IRREVERSIBLE 需人工确认） (risk-rules.yaml)",
+            "高危阻断规则（BLOCK） (risk-rules.yaml)",
+            "麒麟高级服务器操作系统 V11 基础 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "UNKNOWN",
+          "status": "PLANNED",
+          "resultSummary": "等待分析阶段综合执行结果与证据链。"
+        }
+      ]
+    },
+    "injection": {
+      "blocked": false,
+      "matchedPatterns": [],
+      "reason": null
+    },
+    "decisions": [
+      {
+        "command": "cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt",
+        "level": "EXECUTABLE",
+        "action": "REQUIRE_APPROVAL",
+        "requiresApproval": true,
+        "requiresBackup": false,
+        "requiresDryRun": true,
+        "matchedRules": [
+          "reviewBinary"
+        ],
+        "reasons": [
+          "管道按最高风险段裁决：可逆/受限变更操作（tee）需人工确认或 dry-run"
+        ],
+        "saferAlternative": "优先使用 dry-run 或只读状态检查验证影响范围。",
+        "normalizedInput": "cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt",
+        "originalInputHash": "12d52f540a08719f26fcb0e165ce0b47bafc453b3a86bcb9c76d6f700bcb5e35"
+      }
+    ],
+    "execResults": [
+      {
+        "command": "cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt",
+        "level": "EXECUTABLE",
+        "reason": "管道按最高风险段裁决：可逆/受限变更操作（tee）需人工确认或 dry-run",
+        "executed": false,
+        "requiresApproval": true,
+        "requiresBackup": false,
+        "requiresDryRun": true,
+        "output": "受限变更需人工二次确认后才会执行"
+      }
+    ],
+    "analysis": "【问题】执行 cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt\n【根因假设】用户显式指定管道操作\n【处置思路】检测到显式管道命令，已交由安全护栏分段裁决\n【置信度】0.5\n【执行与证据】\n  - cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt => EXECUTABLE(未执行)\n【结论】已按「感知-推理-校验-执行-分析」闭环完成处理，详细步骤可在溯源详情中查看。",
+    "retrieval": [
+      {
+        "id": "rule-review",
+        "kind": "rule",
+        "source": "risk-rules.yaml",
+        "title": "变更类命令（EXECUTABLE / IRREVERSIBLE 需人工确认）",
+        "snippet": "以下命令属于变更类操作，需人工二次确认后才会以最小权限执行：rm、rmdir、kill、killall、pkill、systemctl、service、chmod、chown、chgrp、mv、mount、umount、truncate、tee、dd、iptables、nft、useradd、userdel、passwd、taskkill、strace",
+        "score": 6.802
+      },
+      {
+        "id": "rule-block",
+        "kind": "rule",
+        "source": "risk-rules.yaml",
+        "title": "高危阻断规则（BLOCK）",
+        "snippet": "命中以下模式将被直接拒绝执行：(^|\\s)rm\\s+(-[a-zA-Z]*\\s+)*-?[a-zA-Z]*r[a-zA-Z]*f|(^|\\s)rm\\s+-rf\\s+/（递归强制删除（rm -rf），极高风险）；(^|\\s):\\(\\)\\s*\\{\\s*:\\|:&\\s*\\};:（Fork 炸弹）；(^|\\s)mkfs(\\.|\\s)（格式化文件系统）；(^|\\s)d…",
+        "score": 5.311
+      },
+      {
+        "id": "00-kylin-loongarch.md#0",
+        "kind": "doc",
+        "source": "00-kylin-loongarch.md",
+        "title": "麒麟高级服务器操作系统 V11 基础",
+        "snippet": "麒麟 V11（Kylin Advanced Server）基于自主内核与国产生态，使用 systemd 管理服务，软件包管理常用 dnf/yum。查看系统版本：cat /etc/kylin-release 或 cat /etc/os-release。服务管理统一通过 systemctl status/start/stop。日志统一汇聚到 journald，使…",
+        "score": 4.777
+      },
+      {
+        "id": "05-danger-commands.md#0",
+        "kind": "doc",
+        "source": "05-danger-commands.md",
+        "title": "必须阻断的高危操作",
+        "snippet": "rm -rf / 或对关键系统/数据目录递归删除、mkfs 格式化、dd of=/dev/* 覆写设备、shutdown/reboot/halt/poweroff 关停、向 /etc/passwd 等写入、chmod 777 /、chown -R 根目录，均属红线，命中即拒绝。",
+        "score": 4.143
+      }
+    ],
+    "steps": [
+      {
+        "stage": "RECEIVE",
+        "agentName": "ReceiveAgent",
+        "input": {},
+        "output": {
+          "instruction": "执行 cat /etc/passwd | tee /tmp/opsguard-acceptance-pipe.txt"
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 0,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "INJECTION_GUARD",
+        "agentName": "PromptInjectionDetector",
+        "input": {},
+        "output": {
+          "blocked": false,
+          "matchedPatterns": []
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 1,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "SENSE",
+        "agentName": "EnvironmentSensor",
+        "input": {},
+        "output": {
+          "mode": "full",
+          "toolsRun": 7,
+          "sensed": {
+            "db_sense": {
+              "engine": "auto",
+              "redis": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/b9e9a380-68d1-4228-a927-61b30d9ba73b-stdout.log",
+                "listenPort": 6379,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/b5854c7c-180f-4a55-a4f9-52527d6184f2-stdout.log",
+                "establishedConnections": 2
+              },
+              "mysql": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/49641e2e-16b9-4b2c-920d-55f7c74cc536-stdout.log",
+                "listenPort": 3306,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/5b66a530-e3fc-4bd8-a013-e187b94a9f1a-stdout.log",
+                "establishedConnections": 2
+              },
+              "postgresql": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/a3b32f38-58a9-490c-94df-ee7669897c71-stdout.log",
+                "listenPort": 5432,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/964d
+... (truncated)
