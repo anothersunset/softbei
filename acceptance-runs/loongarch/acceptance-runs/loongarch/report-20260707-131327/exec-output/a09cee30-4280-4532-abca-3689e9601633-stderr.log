@@ -1,0 +1,4 @@
+du: 无法读取目录 '/var/log/private': Permission denied
+du: 无法读取目录 '/var/log/samba': Permission denied
+du: 无法读取目录 '/var/log/sssd': Permission denied
+du: 无法读取目录 '/var/log/audit': Permission denied
