@@ -1,0 +1,202 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "traceId": "c6b3c22f-7d55-4041-9b66-a0689d4dc6b5",
+    "status": "REVIEW_PENDING",
+    "message": "计划中含有高危不可逆指令，需人工确认、dry-run 与执行前备份/影响记录。",
+    "plan": {
+      "summary": "检测到显式运维指令，已交由安全护栏校验",
+      "rootCauseHypothesis": "用户显式指定操作",
+      "confidence": 0.5,
+      "steps": [
+        {
+          "command": "systemctl restart nginx",
+          "purpose": "用户直接下达的运维指令"
+        }
+      ]
+    },
+    "executionPlan": {
+      "strategy": "Plan-and-Execute: decompose intent into evidence, action, and verification tasks; guards decide execution.",
+      "executionMode": "sequential-with-human-gates",
+      "summary": "将“执行 systemctl restart nginx”拆解为 1 条候选命令，并按证据采集、受控处置、复核闭环串行推进。",
+      "commandCount": 1,
+      "tasks": [
+        {
+          "id": "T2",
+          "phase": "CHANGE",
+          "title": "受控处置",
+          "objective": "仅在护栏允许且人工确认后执行变更命令。",
+          "commands": [
+            "systemctl restart nginx"
+          ],
+          "commandIndexes": [
+            0
+          ],
+          "dependsOn": [],
+          "evidenceRefs": [
+            "需人工确认的变更类命令 (05-danger-commands.md)",
+            "高危阻断规则（BLOCK） (risk-rules.yaml)",
+            "变更类命令（EXECUTABLE / IRREVERSIBLE 需人工确认） (risk-rules.yaml)"
+          ],
+          "expectedRisk": "IRREVERSIBLE",
+          "status": "WAITING_APPROVAL",
+          "resultSummary": "等待人工确认后执行。"
+        },
+        {
+          "id": "T3",
+          "phase": "VERIFY",
+          "title": "复核与闭环",
+          "objective": "基于执行结果、trace 与 RCA 输出复核处置是否完成。",
+          "commands": [],
+          "commandIndexes": [],
+          "dependsOn": [
+            "T2"
+          ],
+          "evidenceRefs": [
+            "需人工确认的变更类命令 (05-danger-commands.md)",
+            "高危阻断规则（BLOCK） (risk-rules.yaml)",
+            "变更类命令（EXECUTABLE / IRREVERSIBLE 需人工确认） (risk-rules.yaml)"
+          ],
+          "expectedRisk": "UNKNOWN",
+          "status": "PLANNED",
+          "resultSummary": "等待分析阶段综合执行结果与证据链。"
+        }
+      ]
+    },
+    "injection": {
+      "blocked": false,
+      "matchedPatterns": [],
+      "reason": null
+    },
+    "decisions": [
+      {
+        "command": "systemctl restart nginx",
+        "level": "IRREVERSIBLE",
+        "action": "REQUIRE_APPROVAL",
+        "requiresApproval": true,
+        "requiresBackup": true,
+        "requiresDryRun": true,
+        "matchedRules": [
+          "criticalService"
+        ],
+        "reasons": [
+          "命中核心服务变更（systemctl），需人工确认、dry-run 与执行前影响记录"
+        ],
+        "saferAlternative": "先执行只读检查与 dry-run，确认备份/快照后再人工审批。",
+        "normalizedInput": "systemctl restart nginx",
+        "originalInputHash": "af72e7d42dc52c5e6f1871d2a03807f14cf40683321425bf1388c7d8952928ae"
+      }
+    ],
+    "execResults": [
+      {
+        "command": "systemctl restart nginx",
+        "level": "IRREVERSIBLE",
+        "reason": "命中核心服务变更（systemctl），需人工确认、dry-run 与执行前影响记录",
+        "executed": false,
+        "requiresApproval": true,
+        "requiresBackup": true,
+        "requiresDryRun": true,
+        "output": "高危不可逆操作需人工确认、执行前备份/快照与 dry-run 验证"
+      }
+    ],
+    "analysis": "【问题】执行 systemctl restart nginx\n【根因假设】用户显式指定操作\n【处置思路】检测到显式运维指令，已交由安全护栏校验\n【置信度】0.5\n【执行与证据】\n  - systemctl restart nginx => IRREVERSIBLE(未执行)\n【结论】已按「感知-推理-校验-执行-分析」闭环完成处理，详细步骤可在溯源详情中查看。",
+    "retrieval": [
+      {
+        "id": "05-danger-commands.md#1",
+        "kind": "doc",
+        "source": "05-danger-commands.md",
+        "title": "需人工确认的变更类命令",
+        "snippet": "rm、kill、systemctl、service、chmod、chown、mv、mount、umount、truncate、iptables、nft、useradd、userdel、passwd 等会改变系统状态，须在人工确认后以最小权限执行，并保留回滚手段。",
+        "score": 2.937
+      },
+      {
+        "id": "rule-block",
+        "kind": "rule",
+        "source": "risk-rules.yaml",
+        "title": "高危阻断规则（BLOCK）",
+        "snippet": "命中以下模式将被直接拒绝执行：(^|\\s)rm\\s+(-[a-zA-Z]*\\s+)*-?[a-zA-Z]*r[a-zA-Z]*f|(^|\\s)rm\\s+-rf\\s+/（递归强制删除（rm -rf），极高风险）；(^|\\s):\\(\\)\\s*\\{\\s*:\\|:&\\s*\\};:（Fork 炸弹）；(^|\\s)mkfs(\\.|\\s)（格式化文件系统）；(^|\\s)d…",
+        "score": 2.937
+      },
+      {
+        "id": "rule-review",
+        "kind": "rule",
+        "source": "risk-rules.yaml",
+        "title": "变更类命令（EXECUTABLE / IRREVERSIBLE 需人工确认）",
+        "snippet": "以下命令属于变更类操作，需人工二次确认后才会以最小权限执行：rm、rmdir、kill、killall、pkill、systemctl、service、chmod、chown、chgrp、mv、mount、umount、truncate、tee、dd、iptables、nft、useradd、userdel、passwd、taskkill、strace",
+        "score": 2.937
+      },
+      {
+        "id": "00-kylin-loongarch.md#0",
+        "kind": "doc",
+        "source": "00-kylin-loongarch.md",
+        "title": "麒麟高级服务器操作系统 V11 基础",
+        "snippet": "麒麟 V11（Kylin Advanced Server）基于自主内核与国产生态，使用 systemd 管理服务，软件包管理常用 dnf/yum。查看系统版本：cat /etc/kylin-release 或 cat /etc/os-release。服务管理统一通过 systemctl status/start/stop。日志统一汇聚到 journald，使…",
+        "score": 1.649
+      }
+    ],
+    "steps": [
+      {
+        "stage": "RECEIVE",
+        "agentName": "ReceiveAgent",
+        "input": {},
+        "output": {
+          "instruction": "执行 systemctl restart nginx"
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 0,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "INJECTION_GUARD",
+        "agentName": "PromptInjectionDetector",
+        "input": {},
+        "output": {
+          "blocked": false,
+          "matchedPatterns": []
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 1,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "SENSE",
+        "agentName": "EnvironmentSensor",
+        "input": {},
+        "output": {
+          "mode": "full",
+          "toolsRun": 7,
+          "sensed": {
+            "db_sense": {
+              "engine": "auto",
+              "redis": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/c4081ef3-5ff8-4226-8777-552e41ca956b-stdout.log",
+                "listenPort": 6379,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/4c553cbd-c3e8-4186-af38-d636be79f250-stdout.log",
+                "establishedConnections": 2
+              },
+              "mysql": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/90bf4e7d-2a10-4722-bba9-90e4895208c2-stdout.log",
+                "listenPort": 3306,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/be34058b-f2df-4324-8c8f-6a33c3a33d8b-stdout.log",
+                "establishedConnections": 2
+              },
+              "postgresql": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/e2744d6d-b005-486f-b2a0-d5b75731c4f6-stdout.log",
+                "listenPort": 5432,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/c685b670-4582-413d-87ec-f3e6fad47f58-stdout.log",
+                "establishedConnections": 2
+              }
+            },
+            "disk_sense": {
+              "df": "文件系统               大小  已用  可用 已用% 挂载点\n/dev/mapper/klas-root   93G   11G   83G   11% /\ndevtmpfs       
+... (truncated)
