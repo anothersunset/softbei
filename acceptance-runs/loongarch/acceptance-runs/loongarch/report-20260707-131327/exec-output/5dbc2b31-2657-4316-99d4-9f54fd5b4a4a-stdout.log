@@ -1,0 +1,11 @@
+文件系统              1024的块     已用     可用 容量 挂载点
+/dev/mapper/klas-root 96919552 10556496 86363056  11% /
+devtmpfs                  4096        0     4096   0% /dev
+tmpfs                  5913696    46672  5867024   1% /dev/shm
+tmpfs                     4096        0     4096   0% /sys/fs/cgroup
+efivarfs                   256        3      254   2% /sys/firmware/efi/efivars
+tmpfs                  2365488    50048  2315440   3% /run
+tmpfs                  5913712    57504  5856208   1% /tmp
+/dev/vda2               983040   422788   560252  44% /boot
+/dev/vda1               613160    11908   601252   2% /boot/efi
+tmpfs                  1182736      192  1182544   1% /run/user/1000
