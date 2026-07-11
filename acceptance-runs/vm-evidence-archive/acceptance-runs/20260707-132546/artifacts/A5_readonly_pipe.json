@@ -1,0 +1,194 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "traceId": "0c88a765-f003-4ef8-aa6e-39e01612d38e",
+    "status": "EXECUTED",
+    "message": "已完成闭环处理。",
+    "plan": {
+      "summary": "检测到显式管道命令，已交由安全护栏分段裁决",
+      "rootCauseHypothesis": "用户显式指定管道操作",
+      "confidence": 0.5,
+      "steps": [
+        {
+          "command": "ps aux | grep java",
+          "purpose": "用户直接下达的管道命令"
+        }
+      ]
+    },
+    "executionPlan": {
+      "strategy": "Plan-and-Execute: decompose intent into evidence, action, and verification tasks; guards decide execution.",
+      "executionMode": "sequential-with-human-gates",
+      "summary": "将“执行 ps aux | grep java”拆解为 1 条候选命令，并按证据采集、受控处置、复核闭环串行推进。",
+      "commandCount": 1,
+      "tasks": [
+        {
+          "id": "T1",
+          "phase": "OBSERVE",
+          "title": "采集证据",
+          "objective": "先运行只读命令，确认故障范围和影响面。",
+          "commands": [
+            "ps aux | grep java"
+          ],
+          "commandIndexes": [
+            0
+          ],
+          "dependsOn": [],
+          "evidenceRefs": [
+            "只读感知命令（READONLY） (risk-rules.yaml)",
+            "CPU 高 / 负载高 处置流程 (02-runbook-cpu-process.md)",
+            "磁盘满 / 空间不足 处置流程 (01-runbook-disk.md)"
+          ],
+          "expectedRisk": "READONLY",
+          "status": "EXECUTED",
+          "resultSummary": "已处理 1 条命令。"
+        },
+        {
+          "id": "T3",
+          "phase": "VERIFY",
+          "title": "复核与闭环",
+          "objective": "基于执行结果、trace 与 RCA 输出复核处置是否完成。",
+          "commands": [],
+          "commandIndexes": [],
+          "dependsOn": [
+            "T1"
+          ],
+          "evidenceRefs": [
+            "只读感知命令（READONLY） (risk-rules.yaml)",
+            "CPU 高 / 负载高 处置流程 (02-runbook-cpu-process.md)",
+            "磁盘满 / 空间不足 处置流程 (01-runbook-disk.md)"
+          ],
+          "expectedRisk": "READONLY",
+          "status": "PLANNED",
+          "resultSummary": "等待分析阶段综合执行结果与证据链。"
+        }
+      ]
+    },
+    "injection": {
+      "blocked": false,
+      "matchedPatterns": [],
+      "reason": null
+    },
+    "decisions": [
+      {
+        "command": "ps aux | grep java",
+        "level": "READONLY",
+        "action": "ALLOW",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "readOnly"
+        ],
+        "reasons": [
+          "管道由只读命令拼接，整体只读放行"
+        ],
+        "saferAlternative": "",
+        "normalizedInput": "ps aux | grep java",
+        "originalInputHash": "5304e68e84a6e1da1456a47b5af0157d5c0bcf3c1607c76051eaff1d96f67883"
+      }
+    ],
+    "execResults": [
+      {
+        "command": "ps aux | grep java",
+        "level": "READONLY",
+        "reason": "管道由只读命令拼接，整体只读放行",
+        "executed": true,
+        "exitCode": 0,
+        "dryRun": false,
+        "output": "vmuser   1066029 99.0  1.8 3480016 215232 pts/3  Sl+  13:25   0:18 java -Xmx768m -jar /home/vmuser/softbei-main-latest/softbei-main/backend/target/ops-agent.jar --server.port=18081 --server.address=127.0.0.1\nvmuser   1067130  0.0  0.0  35936 10176 pts/3    S+   13:26   0:00 curl -sS --connect-timeout 5 --max-time 45 -H Content-Type: application/json -X POST http://127.0.0.1:18081/api/ops/chat -d {\"instruction\":\"执行 ps aux | grep java\"}}\nvmuser   1067186  0.0  0.0  21840  2240 pts/3    S+   13:26   0:00 grep java\n\n[output-audit] 完整 521 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/68fc788d-5b6f-4fd8-b102-e722ecd88e2f-p2-stdout.log\n[stderr] [pipe-stage-1] \n[output-audit] 完整 0 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/68fc788d-5b6f-4fd8-b102-e722ecd88e2f-p1-stderr.log\n[pipe-stage-2] \n[output-audit] 完整 0 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/68fc788d-5b6f-4fd8-b102-e722ecd88e2f-p2-stderr.log"
+      }
+    ],
+    "analysis": "【问题】执行 ps aux | grep java\n【根因假设】用户显式指定管道操作\n【处置思路】检测到显式管道命令，已交由安全护栏分段裁决\n【置信度】0.5\n【执行与证据】\n  - ps aux | grep java => READONLY(已执行)\n【结论】已按「感知-推理-校验-执行-分析」闭环完成处理，详细步骤可在溯源详情中查看。",
+    "retrieval": [
+      {
+        "id": "rule-ro",
+        "kind": "rule",
+        "source": "risk-rules.yaml",
+        "title": "只读感知命令（READONLY）",
+        "snippet": "以下只读命令可安全执行用于诊断：ls、cat、head、tail、df、du、free、ps、top、ss、netstat、journalctl、lsof、uptime、uname、stat、grep、find、who、w、vmstat、iostat、date、hostname、whoami、id、dmesg、ping、which、tasklist、dir",
+        "score": 7.403
+      },
+      {
+        "id": "02-runbook-cpu-process.md#0",
+        "kind": "doc",
+        "source": "02-runbook-cpu-process.md",
+        "title": "CPU 高 / 负载高 处置流程",
+        "snippet": "1）uptime 查看 1/5/15 分钟平均负载；2）top 或 ps 找出 CPU 占用最高的进程；3）结合业务判断是否为预期峰值；4）对确属异常的进程，先尝试降级或限流，必要时在确认后 kill 指定 PID。严禁无差别 killall 或对系统关键进程发送信号。",
+        "score": 2.773
+      },
+      {
+        "id": "01-runbook-disk.md#0",
+        "kind": "doc",
+        "source": "01-runbook-disk.md",
+        "title": "磁盘满 / 空间不足 处置流程",
+        "snippet": "1）df -h 确认告警挂载点与使用率；2）du -x --max-depth=1 逐层定位大目录；3）优先清理应用滚动日志、临时文件、过期缓存；4）删除前确认文件不再被进程占用（lsof）；5）清理后复查 df -h。注意：禁止 rm -rf / 或对 /var/lib/mysql、/var/lib/pgsql 等数据目录执行删除，应通过业务侧归档或扩容解…",
+        "score": 1.196
+      },
+      {
+        "id": "03-runbook-network-port.md#0",
+        "kind": "doc",
+        "source": "03-runbook-network-port.md",
+        "title": "端口占用 / 连接异常 处置流程",
+        "snippet": "1）ss -tlnp 或 netstat -tlnp 查看监听端口与对应进程；2）定位占用目标端口的 PID 与服务；3）若为冲突服务，先停止对应 systemd 服务而非直接 kill；4）检查防火墙放行（firewalld/iptables/nft）。只读排查命令（ss、netstat）可安全执行。",
+        "score": 1.196
+      }
+    ],
+    "steps": [
+      {
+        "stage": "RECEIVE",
+        "agentName": "ReceiveAgent",
+        "input": {},
+        "output": {
+          "instruction": "执行 ps aux | grep java"
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 0,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "INJECTION_GUARD",
+        "agentName": "PromptInjectionDetector",
+        "input": {},
+        "output": {
+          "blocked": false,
+          "matchedPatterns": []
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 2,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "SENSE",
+        "agentName": "EnvironmentSensor",
+        "input": {},
+        "output": {
+          "mode": "full",
+          "toolsRun": 7,
+          "sensed": {
+            "db_sense": {
+              "engine": "auto",
+              "redis": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/9520adfd-ba12-4d11-ac33-6c5f4227f50f-stdout.log",
+                "listenPort": 6379,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/c3e6e804-a1a5-437f-82f3-8782bc8c0cb2-stdout.log",
+                "establishedConnections": 2
+              },
+              "mysql": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/7ce11b4a-6f6a-4c0b-af96-d87c5c59cdf9-stdout.log",
+                "listenPort": 3306,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/002db4bf-3c6f-49eb-bcd5-df85a19b5bb1-stdout.log",
+                "establishedConnections": 2
+              },
+              "postgresql": {
+                "processUp": true,
+                "proc
+... (truncated)
