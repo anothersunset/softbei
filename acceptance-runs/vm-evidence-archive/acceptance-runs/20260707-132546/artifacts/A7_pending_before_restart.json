@@ -1,0 +1,202 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "traceId": "33774b67-6880-48c5-94ad-9d06423df22d",
+    "status": "REVIEW_PENDING",
+    "message": "计划中含有高危不可逆指令，需人工确认、dry-run 与执行前备份/影响记录。",
+    "plan": {
+      "summary": "检测到显式运维指令，已交由安全护栏校验",
+      "rootCauseHypothesis": "用户显式指定操作",
+      "confidence": 0.5,
+      "steps": [
+        {
+          "command": "systemctl restart nginx",
+          "purpose": "用户直接下达的运维指令"
+        }
+      ]
+    },
+    "executionPlan": {
+      "strategy": "Plan-and-Execute: decompose intent into evidence, action, and verification tasks; guards decide execution.",
+      "executionMode": "sequential-with-human-gates",
+      "summary": "将“执行 systemctl restart nginx”拆解为 1 条候选命令，并按证据采集、受控处置、复核闭环串行推进。",
+      "commandCount": 1,
+      "tasks": [
+        {
+          "id": "T2",
+          "phase": "CHANGE",
+          "title": "受控处置",
+          "objective": "仅在护栏允许且人工确认后执行变更命令。",
+          "commands": [
+            "systemctl restart nginx"
+          ],
+          "commandIndexes": [
+            0
+          ],
+          "dependsOn": [],
+          "evidenceRefs": [
+            "执行 systemctl restart nginx (历史trace)",
+            "需人工确认的变更类命令 (05-danger-commands.md)",
+            "高危阻断规则（BLOCK） (risk-rules.yaml)"
+          ],
+          "expectedRisk": "IRREVERSIBLE",
+          "status": "WAITING_APPROVAL",
+          "resultSummary": "等待人工确认后执行。"
+        },
+        {
+          "id": "T3",
+          "phase": "VERIFY",
+          "title": "复核与闭环",
+          "objective": "基于执行结果、trace 与 RCA 输出复核处置是否完成。",
+          "commands": [],
+          "commandIndexes": [],
+          "dependsOn": [
+            "T2"
+          ],
+          "evidenceRefs": [
+            "执行 systemctl restart nginx (历史trace)",
+            "需人工确认的变更类命令 (05-danger-commands.md)",
+            "高危阻断规则（BLOCK） (risk-rules.yaml)"
+          ],
+          "expectedRisk": "UNKNOWN",
+          "status": "PLANNED",
+          "resultSummary": "等待分析阶段综合执行结果与证据链。"
+        }
+      ]
+    },
+    "injection": {
+      "blocked": false,
+      "matchedPatterns": [],
+      "reason": null
+    },
+    "decisions": [
+      {
+        "command": "systemctl restart nginx",
+        "level": "IRREVERSIBLE",
+        "action": "REQUIRE_APPROVAL",
+        "requiresApproval": true,
+        "requiresBackup": true,
+        "requiresDryRun": true,
+        "matchedRules": [
+          "criticalService"
+        ],
+        "reasons": [
+          "命中核心服务变更（systemctl），需人工确认、dry-run 与执行前影响记录"
+        ],
+        "saferAlternative": "先执行只读检查与 dry-run，确认备份/快照后再人工审批。",
+        "normalizedInput": "systemctl restart nginx",
+        "originalInputHash": "af72e7d42dc52c5e6f1871d2a03807f14cf40683321425bf1388c7d8952928ae"
+      }
+    ],
+    "execResults": [
+      {
+        "command": "systemctl restart nginx",
+        "level": "IRREVERSIBLE",
+        "reason": "命中核心服务变更（systemctl），需人工确认、dry-run 与执行前影响记录",
+        "executed": false,
+        "requiresApproval": true,
+        "requiresBackup": true,
+        "requiresDryRun": true,
+        "output": "高危不可逆操作需人工确认、执行前备份/快照与 dry-run 验证"
+      }
+    ],
+    "analysis": "【问题】执行 systemctl restart nginx\n【根因假设】用户显式指定操作\n【处置思路】检测到显式运维指令，已交由安全护栏校验\n【置信度】0.5\n【执行与证据】\n  - systemctl restart nginx => IRREVERSIBLE(未执行)\n【结论】已按「感知-推理-校验-执行-分析」闭环完成处理，详细步骤可在溯源详情中查看。",
+    "retrieval": [
+      {
+        "id": "hist-8",
+        "kind": "history",
+        "source": "历史trace",
+        "title": "执行 systemctl restart nginx",
+        "snippet": "执行 systemctl restart nginx。历史处置结论：REVIEW_PENDING",
+        "score": 8.587
+      },
+      {
+        "id": "hist-11",
+        "kind": "history",
+        "source": "历史trace",
+        "title": "执行 systemctl restart nginx",
+        "snippet": "执行 systemctl restart nginx。历史处置结论：EXECUTED",
+        "score": 8.587
+      },
+      {
+        "id": "05-danger-commands.md#1",
+        "kind": "doc",
+        "source": "05-danger-commands.md",
+        "title": "需人工确认的变更类命令",
+        "snippet": "rm、kill、systemctl、service、chmod、chown、mv、mount、umount、truncate、iptables、nft、useradd、userdel、passwd 等会改变系统状态，须在人工确认后以最小权限执行，并保留回滚手段。",
+        "score": 2.862
+      },
+      {
+        "id": "rule-block",
+        "kind": "rule",
+        "source": "risk-rules.yaml",
+        "title": "高危阻断规则（BLOCK）",
+        "snippet": "命中以下模式将被直接拒绝执行：(^|\\s)rm\\s+(-[a-zA-Z]*\\s+)*-?[a-zA-Z]*r[a-zA-Z]*f|(^|\\s)rm\\s+-rf\\s+/（递归强制删除（rm -rf），极高风险）；(^|\\s):\\(\\)\\s*\\{\\s*:\\|:&\\s*\\};:（Fork 炸弹）；(^|\\s)mkfs(\\.|\\s)（格式化文件系统）；(^|\\s)d…",
+        "score": 2.862
+      }
+    ],
+    "steps": [
+      {
+        "stage": "RECEIVE",
+        "agentName": "ReceiveAgent",
+        "input": {},
+        "output": {
+          "instruction": "执行 systemctl restart nginx"
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 0,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "INJECTION_GUARD",
+        "agentName": "PromptInjectionDetector",
+        "input": {},
+        "output": {
+          "blocked": false,
+          "matchedPatterns": []
+        },
+        "model": null,
+        "confidence": null,
+        "elapsedMs": 0,
+        "tokenIn": null,
+        "tokenOut": null,
+        "status": "ok"
+      },
+      {
+        "stage": "SENSE",
+        "agentName": "EnvironmentSensor",
+        "input": {},
+        "output": {
+          "mode": "full",
+          "toolsRun": 7,
+          "sensed": {
+            "db_sense": {
+              "engine": "auto",
+              "redis": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/9818ccf8-c862-49f5-b52b-9abec1fb6a7c-stdout.log",
+                "listenPort": 6379,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/5b74d7b9-36fe-4af5-bfaa-28141d2682f4-stdout.log",
+                "establishedConnections": 2
+              },
+              "mysql": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/71684c30-ae5d-4175-bf4a-a18eca023c78-stdout.log",
+                "listenPort": 3306,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/60d05347-6a7f-4a1e-a511-7ae59816daf6-stdout.log",
+                "establishedConnections": 2
+              },
+              "postgresql": {
+                "processUp": true,
+                "process": "    PID USER     %CPU %MEM     ELAPSED COMMAND\n\n[output-audit] 完整 47 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/d0ec32a7-90b6-47c4-a37b-3aa06699616d-stdout.log",
+                "listenPort": 5432,
+                "listening": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n\n[output-audit] 完整 64 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/da077235-3d8d-4e80-94d2-84a76c03739d-stdout.log",
+                "establishedConnections": 2
+              }
+            },
+            "disk_sense": {
+              "df": "文件系统               大小  已用  可用 已用% 挂载点\n/dev/mapper/klas-root   93G   11G   83G   11% /\ndevtmpfs               4.0M     0  4.0M    0% /dev\ntmpfs                  5.7G   46M  5.6G    1% /dev/shm\ntmpfs                  4.0M     0  4.0M    0% /sys/fs/cgroup\nefivarfs               256K  2.7K  254K    2% /sys/firmware/efi/efivars\ntmpfs                  2.3G   49M  2.3G    3% /run\ntmpfs                  5.7G   57M  5.6G    1% /tmp\n/dev/vda2       
+... (truncated)
