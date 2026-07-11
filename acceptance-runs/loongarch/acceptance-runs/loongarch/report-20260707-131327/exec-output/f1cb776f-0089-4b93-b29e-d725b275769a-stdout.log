@@ -1,0 +1,11 @@
+文件系统               大小  已用  可用 已用% 挂载点
+/dev/mapper/klas-root   93G   11G   83G   11% /
+devtmpfs               4.0M     0  4.0M    0% /dev
+tmpfs                  5.7G   46M  5.6G    1% /dev/shm
+tmpfs                  4.0M     0  4.0M    0% /sys/fs/cgroup
+efivarfs               256K  2.7K  254K    2% /sys/firmware/efi/efivars
+tmpfs                  2.3G   49M  2.3G    3% /run
+tmpfs                  5.7G   57M  5.6G    1% /tmp
+/dev/vda2              960M  413M  548M   44% /boot
+/dev/vda1              599M   12M  588M    2% /boot/efi
+tmpfs                  1.2G  192K  1.2G    1% /run/user/1000
