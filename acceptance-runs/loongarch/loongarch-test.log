@@ -1,0 +1,80 @@
+== OpsGuard LoongArch/VM full acceptance ==
+Report dir: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/loongarch/report-20260707-131327
+[PASS] ENV-01 command:bash /usr/bin/bash
+[PASS] ENV-02 command:git /usr/bin/git
+[PASS] ENV-03 command:java /usr/lib/jvm/java-17-openjdk-17.0.18.8-8.p01.ky11.loongarch64/bin/java
+[PASS] ENV-04 command:mvn /usr/bin/mvn
+[PASS] ENV-05 command:curl /usr/bin/curl
+[PASS] ENV-06 command:jq /usr/bin/jq
+[PASS] ENV-07 command:timeout /usr/bin/timeout
+[PASS] ENV-08 architecture loongarch64
+[PASS] ENV-09 java-version openjdk version "17.0.18" 2026-01-20
+[PASS] GIT-01 repo-present /home/vmuser/softbei-main-latest/softbei-main
+[SKIP] GIT-02 pull-latest PULL_LATEST=0
+[PASS] GIT-05 repo-commit unknown
+[PASS] BUILD-01 mvn-test ok; log=/home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/loongarch/report-20260707-131327/mvn-test.log
+[PASS] BUILD-02 mvn-package ok; log=/home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/loongarch/report-20260707-131327/mvn-package.log
+[PASS] APP-02 port-free port 18080
+[PASS] APP-03 app-start-command pid=1062294; log=/home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/loongarch/report-20260707-131327/ops-agent.log
+[PASS] APP-04 app-ready health HTTP 200
+[PASS] SEC-01 token-required api runtime without token returned 401
+[PASS] OBS-01 actuator-health jq:.status == "UP"
+[PASS] OBS-info actuator:/actuator/info HTTP 200
+[PASS] OBS-metrics actuator:/actuator/metrics HTTP 200
+[PASS] OBS-prometheus actuator:/actuator/prometheus HTTP 200
+[PASS] UI-01 static-index contains OpsGuard
+[PASS] UI-02 token-input contains id="apiToken"
+[PASS] UI-03 frontend-apiFetch contains apiFetch
+[PASS] UI-04 frontend-token-header contains X-Ops-Token
+[PASS] UI-05 frontend-sse-fetch contains text/event-stream
+[PASS] API-01 runtime jq:.data.llmMode == "MOCK" and .data.dryRun == true and .data.apiTokenRequired == true
+[PASS] API-02 tools-list jq:(.data \| length) >= 6
+[PASS] API-03 tools-health-inspect jq:any(.data[]; .name == "health_inspect")
+[PASS] CHAT-01 readonly-executed jq:.data.status == "EXECUTED"
+[PASS] CHAT-02 execution-plan-present jq:(.data.executionPlan.tasks \| length) >= 1
+[PASS] CHAT-03 security-score-present jq:.data.securityScore.score >= 0
+[PASS] CHAT-04 trace-id 46cca1eb-ce9c-411e-8042-a10f015f895a
+[PASS] GUARD-01 review-pending jq:.data.status == "REVIEW_PENDING"
+[PASS] GUARD-02 confirm-executed jq:.data.status == "EXECUTED"
+[PASS] GUARD-03 confirm-dry-run jq:any(.data.execResults[]; .dryRun == true)
+[PASS] GUARD-04 rollback-plan-present jq:(.data.rollbackPlan \| length) >= 1
+[PASS] GUARD-05 forged-confirm-blocked jq:.data.status == "REVIEW_PENDING"
+[PASS] GUARD-06 danger-blocked jq:.data.status == "BLOCKED"
+[PASS] GUARD-07 injection-blocked jq:.data.status == "INJECTION_BLOCKED"
+[PASS] GUARD-08 dd-critical-blocked jq:.data.status == "BLOCKED"
+[PASS] GUARD-09 kill-pid1-blocked jq:.data.status == "BLOCKED"
+[PASS] ROLL-01 rollback-endpoint jq:.data.traceId != null and (.data.results \| type == "array")
+[PASS] TRACE-01 trace-detail jq:.data.traceId != null and (.data.steps \| length) >= 1
+[PASS] TRACE-02 trace-list jq:(.data \| length) >= 1
+[PASS] REDact-01 response-secret-redaction secret not present in API response
+[PASS] INSPECT-01 active-inspect jq:.data.healthScore >= 0 and (.data.overall \| type == "string")
+[PASS] INSPECT-02 inspect-findings jq:(.data.findings \| length) >= 1
+[PASS] RCA-01 cross-source-rca jq:.data.report.healthScore >= 0 and (.data.rca.overallLevel \| test("^L[123]$"))
+[PASS] RCA-02 rca-insights jq:(.data.rca.insights \| type == "array")
+[PASS] SSE-01 sse-output-present contains data:
+[PASS] SSE-02 sse-status-present contains status
+[PASS] SSE-03 sse-trace-present contains traceId
+[PASS] SSE-04 sse-security-score contains securityScore
+[PASS] MCPH-01 mcp-token-required HTTP 401 without token
+[PASS] MCPH-02 mcp-initialize jq:.result.protocolVersion == "2025-03-26"
+[PASS] MCPH-03 mcp-ping jq:.result == {}
+[PASS] MCPH-04 mcp-tools-list jq:(.result.tools \| length) >= 9
+[PASS] MCPH-05 mcp-tool-annotations jq:all(.result.tools[] \| select([.name] \| inside(["log_rotate","service_restart","config_backup"]) \| not); .annotations.readOnlyHint == true and .annotations.destructiveHint == false)
+[PASS] MCPH-05b mcp-mutating-annotations jq:([.result.tools[] \| select(.annotations.readOnlyHint == false) \| .name] \| sort) == ["config_backup","log_rotate","service_restart"]
+[PASS] MCPH-06 mcp-tools-call jq:.result.isError == false and .result.structuredContent != null
+[PASS] MCPH-07 mcp-invalid-tool-error jq:.error.code == -32602
+[PASS] MCPH-08 mcp-mutation-review-pending jq:.result.isError == false and .result.structuredContent.status == "REVIEW_PENDING" and .result.structuredContent.executed == false and (.result.structuredContent.pendingMutationId \| type == "string" and length > 0)
+[PASS] MCPH-09 mcp-mutation-direct-confirm-blocked jq:.result.structuredContent.status == "REVIEW_PENDING" and .result.structuredContent.executed == false and .result.structuredContent.traceId == null
+[PASS] MCPH-10 mcp-mutation-confirmed jq:.result.structuredContent.status == "EXECUTED" and .result.structuredContent.traceId != null
+[PASS] MCPS-01 mcp-stdio initialize/tools/list/tools/call/ping ok
+[PASS] AUDIT-01 trace-file-created /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/loongarch/report-20260707-131327/ops-trace.jsonl
+[PASS] AUDIT-02 exec-output-files 376 files
+[PASS] AUDIT-03 audit-secret-redaction vm-secret-token not found in trace/output audit
+[PASS] AUDIT-04 private-key-redaction-regression known secret markers absent
+[PASS] DEPLOY-01 docker-compose-env-names underscore env names
+[PASS] DEPLOY-02 sudoers-no-restart-wildcard no restart wildcard
+[PASS] DEPLOY-03 sudoers-syntax visudo -c ok
+
+== Summary ==
+PASS=73 FAIL=0 SKIP=1 TOTAL=74
+Report: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/loongarch/report-20260707-131327/opsguard-vm-acceptance-report.md
