@@ -1,0 +1,221 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "traceId": "73b560bd-bad4-4fcd-a850-5e9fe3098f15",
+    "status": "REVIEW_PENDING",
+    "message": "计划中含有高危不可逆指令，需人工确认、dry-run 与执行前备份/影响记录。",
+    "plan": {
+      "summary": "nginx 错误日志查询无结果，但系统日志可能未正确配置或 nginx 未运行。",
+      "rootCauseHypothesis": "nginx 可能未运行或日志未正确输出到 journald，需检查 nginx 服务状态和日志配置。",
+      "confidence": 0.7,
+      "steps": [
+        {
+          "command": "systemctl status nginx",
+          "purpose": "检查 nginx 服务是否运行"
+        },
+        {
+          "command": "journalctl -u nginx -n 50 --no-pager",
+          "purpose": "查看 nginx 最近的 journald 日志"
+        },
+        {
+          "command": "ls -la /var/log/nginx/",
+          "purpose": "检查 nginx 应用日志文件是否存在"
+        },
+        {
+          "command": "tail -n 100 /var/log/nginx/error.log",
+          "purpose": "查看 nginx 错误日志文件内容"
+        }
+      ]
+    },
+    "executionPlan": {
+      "strategy": "Plan-and-Execute: decompose intent into evidence, action, and verification tasks; guards decide execution.",
+      "executionMode": "sequential-with-human-gates",
+      "summary": "将“看看 nginx 最近的错误日志”拆解为 4 条候选命令，并按证据采集、受控处置、复核闭环串行推进。",
+      "commandCount": 4,
+      "tasks": [
+        {
+          "id": "T1",
+          "phase": "OBSERVE",
+          "title": "采集证据",
+          "objective": "先运行只读命令，确认故障范围和影响面。",
+          "commands": [
+            "journalctl -u nginx -n 50 --no-pager",
+            "ls -la /var/log/nginx/",
+            "tail -n 100 /var/log/nginx/error.log"
+          ],
+          "commandIndexes": [
+            1,
+            2,
+            3
+          ],
+          "dependsOn": [],
+          "evidenceRefs": [
+            "服务报错 / 错误日志定位 (04-runbook-log.md)",
+            "日志膨胀治理 (01-runbook-disk.md)",
+            "麒麟高级服务器操作系统 V11 基础 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "READONLY",
+          "status": "EXECUTED",
+          "resultSummary": "已处理 3 条命令。"
+        },
+        {
+          "id": "T2",
+          "phase": "CHANGE",
+          "title": "受控处置",
+          "objective": "仅在护栏允许且人工确认后执行变更命令。",
+          "commands": [
+            "systemctl status nginx"
+          ],
+          "commandIndexes": [
+            0
+          ],
+          "dependsOn": [
+            "T1"
+          ],
+          "evidenceRefs": [
+            "服务报错 / 错误日志定位 (04-runbook-log.md)",
+            "日志膨胀治理 (01-runbook-disk.md)",
+            "麒麟高级服务器操作系统 V11 基础 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "IRREVERSIBLE",
+          "status": "WAITING_APPROVAL",
+          "resultSummary": "等待人工确认后执行。"
+        },
+        {
+          "id": "T3",
+          "phase": "VERIFY",
+          "title": "复核与闭环",
+          "objective": "基于执行结果、trace 与 RCA 输出复核处置是否完成。",
+          "commands": [],
+          "commandIndexes": [],
+          "dependsOn": [
+            "T2"
+          ],
+          "evidenceRefs": [
+            "服务报错 / 错误日志定位 (04-runbook-log.md)",
+            "日志膨胀治理 (01-runbook-disk.md)",
+            "麒麟高级服务器操作系统 V11 基础 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "UNKNOWN",
+          "status": "PLANNED",
+          "resultSummary": "等待分析阶段综合执行结果与证据链。"
+        }
+      ]
+    },
+    "injection": {
+      "blocked": false,
+      "matchedPatterns": [],
+      "reason": null
+    },
+    "decisions": [
+      {
+        "command": "systemctl status nginx",
+        "level": "IRREVERSIBLE",
+        "action": "REQUIRE_APPROVAL",
+        "requiresApproval": true,
+        "requiresBackup": true,
+        "requiresDryRun": true,
+        "matchedRules": [
+          "criticalService"
+        ],
+        "reasons": [
+          "命中核心服务变更（systemctl），需人工确认、dry-run 与执行前影响记录"
+        ],
+        "saferAlternative": "先执行只读检查与 dry-run，确认备份/快照后再人工审批。",
+        "normalizedInput": "systemctl status nginx",
+        "originalInputHash": "897ee69a3f0c2f96e36c3bbe517b108a14d73277c2fadca7d5fe850727824df4"
+      },
+      {
+        "command": "journalctl -u nginx -n 50 --no-pager",
+        "level": "READONLY",
+        "action": "ALLOW",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "readOnly"
+        ],
+        "reasons": [
+          "只读/感知类指令"
+        ],
+        "saferAlternative": "",
+        "normalizedInput": "journalctl -u nginx -n 50 --no-pager",
+        "originalInputHash": "f98977d96278c233f0b9cdc1cbddf8be402b4f98ed994ccd927102c619d74f5e"
+      },
+      {
+        "command": "ls -la /var/log/nginx/",
+        "level": "READONLY",
+        "action": "ALLOW",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "readOnly"
+        ],
+        "reasons": [
+          "只读/感知类指令"
+        ],
+        "saferAlternative": "",
+        "normalizedInput": "ls -la /var/log/nginx/",
+        "originalInputHash": "27ea93b8d05630640709e10ace3a49a0e66106e0a2e0dd7d44f88c9cb6c4fcae"
+      },
+      {
+        "command": "tail -n 100 /var/log/nginx/error.log",
+        "level": "READONLY",
+        "action": "ALLOW",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "readOnly"
+        ],
+        "reasons": [
+          "只读/感知类指令"
+        ],
+        "saferAlternative": "",
+        "normalizedInput": "tail -n 100 /var/log/nginx/error.log",
+        "originalInputHash": "a92bc7213e384f73c12800a0517359f13519dae2e0841555d7563ec1439a0f22"
+      }
+    ],
+    "execResults": [
+      {
+        "command": "systemctl status nginx",
+        "level": "IRREVERSIBLE",
+        "reason": "命中核心服务变更（systemctl），需人工确认、dry-run 与执行前影响记录",
+        "executed": false,
+        "requiresApproval": true,
+        "requiresBackup": true,
+        "requiresDryRun": true,
+        "output": "高危不可逆操作需人工确认、执行前备份/快照与 dry-run 验证"
+      },
+      {
+        "command": "journalctl -u nginx -n 50 --no-pager",
+        "level": "READONLY",
+        "reason": "只读/感知类指令",
+        "executed": true,
+        "exitCode": 0,
+        "dryRun": false,
+        "output": "-- No entries --\n\n[output-audit] 完整 17 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/be18de0e-5c41-488c-a6c5-870c0b3b2067-stdout.log\n[stderr] \n[output-audit] 完整 0 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/be18de0e-5c41-488c-a6c5-870c0b3b2067-stderr.log"
+      },
+      {
+        "command": "ls -la /var/log/nginx/",
+        "level": "READONLY",
+        "reason": "只读/感知类指令",
+        "executed": true,
+        "exitCode": 2,
+        "dryRun": false,
+        "output": "\n[output-audit] 完整 0 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/c0e55f4d-8c56-471f-b7b7-2490d5935f9f-stdout.log\n[stderr] ls: 无法访问 '/var/log/nginx/': No such file or directory\n\n[output-audit] 完整 62 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/c0e55f4d-8c56-471f-b7b7-2490d5935f9f-stderr.log"
+      },
+      {
+        "command": "tail -n 100 /var/log/nginx/error.log",
+        "level": "READONLY",
+        "reason": "只读/感知类指令",
+        "executed": true,
+        "exitCode": 1,
+        "dryRun": false,
+        "output": "\n[output-audit] 完整 0 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/6bfe420e-896f-454a-925b-a504495c428f-stdout.log\n[stderr] tail: 无法以读模式打开 '/var/log/nginx/error.log': No such file or directory\n\n[output-audit] 完整 85 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/6bfe420e-896f-454a-925b-a504495c428f-stderr.log"
+      }
+    ],
+    "analysis": "【问题】看看 nginx 最近的错误日志\n【根因假设】nginx 可能未运行或日志未正确输出到 journald，需检查 nginx 服务状态和日志配置。\n【处置思路】nginx 错误日志查询无结果，但系统日志可能未正确配置或 nginx 未运行。\n【置信度】0.7\n【执行与证据】\n  - systemctl status nginx => IRREVERSIBLE(未执行)\n  - journalctl -u nginx -n 50 --no-pager => READONLY(已执行)\n  - ls -la /v
+... (truncated)
