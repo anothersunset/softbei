@@ -1,0 +1,12 @@
+0	/var/log/private
+0	/var/log/samba
+0	/var/log/chrony
+0	/var/log/sssd
+36K	/var/log/lightdm
+12M	/var/log/ksaf
+2.4M	/var/log/sa
+32K	/var/log/tuned
+0	/var/log/audit
+72K	/var/log/kylin
+6.9M	/var/log/anaconda
+38M	/var/log
