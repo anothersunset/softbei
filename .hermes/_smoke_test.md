@@ -1,1 +1,1 @@
-smoke-test-ok
+null
