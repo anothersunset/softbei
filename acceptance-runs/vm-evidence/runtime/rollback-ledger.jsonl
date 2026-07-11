@@ -1,0 +1,2 @@
+{"traceId":"c6b3c22f-7d55-4041-9b66-a0689d4dc6b5","createdAt":1783401969781,"ledger":[{"origin":"systemctl restart nginx","reversible":false,"manual":"restart 无幂等逆操作，如需回滚请依据变更前状态手动恢复服务 nginx"}]}
+{"traceId":"33774b67-6880-48c5-94ad-9d06423df22d","createdAt":1783401983397,"ledger":[{"origin":"systemctl restart nginx","reversible":false,"manual":"restart 无幂等逆操作，如需回滚请依据变更前状态手动恢复服务 nginx"}]}
