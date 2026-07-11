@@ -64,23 +64,5 @@
 {"id":"A12-01","name":"prometheus-endpoint","status":"PASS","detail":"HTTP 200"}
 {"id":"A12-02","name":"static-console","status":"PASS","detail":"index contains OpsGuard"}
 {"id":"APP-01","name":"jar-present","status":"PASS","detail":"/home/vmuser/softbei-main-latest/softbei-main/backend/target/ops-agent.jar"}
-{"id":"APP-02","name":"port-free","status":"PASS","detail":"http://127.0.0.1:18081"}
-{"id":"APP-03","name":"app-start-command","status":"PASS","detail":"mode=real pid=1067944 log=/home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/ops-agent.log"}
-{"id":"APP-04","name":"app-ready","status":"PASS","detail":"mode=real health=200"}
-{"id":"B0-03","name":"runtime-real","status":"PASS","detail":"jq:.data.llmReal == true and .data.llmMode == \"REAL\""}
-{"id":"B4-01","name":"real-llm-rca","status":"PASS","detail":"jq:.data.rca.overallLevel | test(\"^L[123]$\")"}
-{"id":"B4-02","name":"llm-summary-present","status":"PASS","detail":"provider=deepseek"}
-{"id":"B1-01","name":"react-demand-sense-status","status":"PASS","detail":"status=REVIEW_PENDING"}
-{"id":"B1-02","name":"react-sense-stage-present","status":"PASS","detail":"jq:any(.data.steps[]; .stage == \"SENSE\")"}
-{"id":"B1-03","name":"react-mode-active","status":"PASS","detail":"mode=react"}
-{"id":"B1-04","name":"react-tools-invoked","status":"PASS","detail":"toolsInvoked=3"}
-{"id":"B1-05","name":"react-rounds","status":"PASS","detail":"rounds=4"}
-{"id":"B1-06","name":"react-summary","status":"PASS","detail":"model produced final summary"}
-{"id":"B1-07","name":"react-no-degradation","status":"PASS","detail":"clean ReAct, no fallback"}
-{"id":"B2-01","name":"intent-consistency-guarded","status":"PASS","detail":"status=BLOCKED"}
-{"id":"B3-01","name":"danger-safety-after-real","status":"PASS","detail":"status=BLOCKED"}
-{"id":"C1-01","name":"one-command-entrypoint","status":"PASS","detail":"scripts/run-acceptance-recorded.sh"}
-{"id":"C1-02","name":"report-directory-created","status":"PASS","detail":"/home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546"}
-{"id":"C1-03","name":"terminal-recording-configured","status":"SKIP","detail":"recording not available in current non-interactive run"}
-{"id":"C1-04","name":"structured-check-log","status":"PASS","detail":"/home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/checks.jsonl"}
-{"id":"C1-05","name":"app-log-captured","status":"PASS","detail":"/home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/ops-agent.log"}
+{"id":"APP-02","name":"port-free","status":"PASS","deta
+... (truncated)
