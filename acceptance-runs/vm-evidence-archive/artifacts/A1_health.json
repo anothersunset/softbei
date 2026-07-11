@@ -1,0 +1,18 @@
+{
+  "status": "UP",
+  "components": {
+    "diskSpace": {
+      "status": "UP",
+      "details": {
+        "total": 99245621248,
+        "free": 88460247040,
+        "threshold": 10485760,
+        "path": "/home/vmuser/softbei-main-latest/softbei-main/backend/.",
+        "exists": true
+      }
+    },
+    "ping": {
+      "status": "UP"
+    }
+  }
+}
