@@ -1,1 +1,1 @@
-null
+AFTER-DELETE-SUCCESS
