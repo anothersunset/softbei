@@ -1,0 +1,216 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "traceId": "7729e194-0bc2-4bae-908d-3015c8386c5f",
+    "status": "BLOCKED",
+    "message": "计划中含有命中红线的高危指令，已拒绝执行。",
+    "plan": {
+      "summary": "清理 /var/log 下旧日志，当前总大小 38M，主要占用为 ksaf(12M)、anaconda(6.9M)、sa(2.4M)，系统日志 journald 未限制，磁盘使用率 11% 正常。",
+      "rootCauseHypothesis": "日志未配置轮转或清理策略，导致历史日志持续累积，但当前空间充足，清理为预防性操作。",
+      "confidence": 0.95,
+      "steps": [
+        {
+          "command": "journalctl --vacuum-size=200M",
+          "purpose": "限制 journald 日志总大小不超过 200M，自动清理旧日志，释放 /var/log/journal 空间。"
+        },
+        {
+          "command": "find /var/log -name '*.log.*' -o -name '*.gz' -o -name '*.old' -type f -mtime +30 -delete",
+          "purpose": "删除 /var/log 下超过 30 天的滚动日志文件（如 *.log.1、*.gz、*.old），释放空间。"
+        },
+        {
+          "command": "rm -rf /var/log/anaconda/*.log",
+          "purpose": "清理 anaconda 安装日志（6.9M），这些日志在系统安装后无保留价值。"
+        },
+        {
+          "command": "df -h /var/log",
+          "purpose": "验证清理后 /var/log 所在分区使用率变化，确保操作有效。"
+        }
+      ]
+    },
+    "executionPlan": {
+      "strategy": "Plan-and-Execute: decompose intent into evidence, action, and verification tasks; guards decide execution.",
+      "executionMode": "sequential-with-human-gates",
+      "summary": "将“清理 /var/log 下的旧日志”拆解为 4 条候选命令，并按证据采集、受控处置、复核闭环串行推进。",
+      "commandCount": 4,
+      "tasks": [
+        {
+          "id": "T1",
+          "phase": "OBSERVE",
+          "title": "采集证据",
+          "objective": "先运行只读命令，确认故障范围和影响面。",
+          "commands": [
+            "journalctl --vacuum-size=200M",
+            "df -h /var/log"
+          ],
+          "commandIndexes": [
+            0,
+            3
+          ],
+          "dependsOn": [],
+          "evidenceRefs": [
+            "日志膨胀治理 (01-runbook-disk.md)",
+            "磁盘满 / 空间不足 处置流程 (01-runbook-disk.md)",
+            "磁盘与文件系统巡检 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "READONLY",
+          "status": "EXECUTED",
+          "resultSummary": "已处理 2 条命令。"
+        },
+        {
+          "id": "T2",
+          "phase": "CHANGE",
+          "title": "受控处置",
+          "objective": "仅在护栏允许且人工确认后执行变更命令。",
+          "commands": [
+            "find /var/log -name '*.log.*' -o -name '*.gz' -o -name '*.old' -type f -mtime +30 -delete",
+            "rm -rf /var/log/anaconda/*.log"
+          ],
+          "commandIndexes": [
+            1,
+            2
+          ],
+          "dependsOn": [
+            "T1"
+          ],
+          "evidenceRefs": [
+            "日志膨胀治理 (01-runbook-disk.md)",
+            "磁盘满 / 空间不足 处置流程 (01-runbook-disk.md)",
+            "磁盘与文件系统巡检 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "BLOCK",
+          "status": "BLOCKED_BY_GUARD",
+          "resultSummary": "命令被护栏拒绝，未进入执行层。"
+        },
+        {
+          "id": "T3",
+          "phase": "VERIFY",
+          "title": "复核与闭环",
+          "objective": "基于执行结果、trace 与 RCA 输出复核处置是否完成。",
+          "commands": [],
+          "commandIndexes": [],
+          "dependsOn": [
+            "T2"
+          ],
+          "evidenceRefs": [
+            "日志膨胀治理 (01-runbook-disk.md)",
+            "磁盘满 / 空间不足 处置流程 (01-runbook-disk.md)",
+            "磁盘与文件系统巡检 (00-kylin-loongarch.md)"
+          ],
+          "expectedRisk": "UNKNOWN",
+          "status": "PLANNED",
+          "resultSummary": "等待分析阶段综合执行结果与证据链。"
+        }
+      ]
+    },
+    "injection": {
+      "blocked": false,
+      "matchedPatterns": [],
+      "reason": null
+    },
+    "decisions": [
+      {
+        "command": "journalctl --vacuum-size=200M",
+        "level": "READONLY",
+        "action": "ALLOW",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "readOnly"
+        ],
+        "reasons": [
+          "只读/感知类指令"
+        ],
+        "saferAlternative": "",
+        "normalizedInput": "journalctl --vacuum-size=200M",
+        "originalInputHash": "4480b94d4cd509c2616c4eb44aa11d6aba2237cdad1c0705a7c175cc6e2a6979"
+      },
+      {
+        "command": "find /var/log -name '*.log.*' -o -name '*.gz' -o -name '*.old' -type f -mtime +30 -delete",
+        "level": "BLOCK",
+        "action": "DENY",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "findMutatingAction"
+        ],
+        "reasons": [
+          "find 参数包含删除、执行或写文件动作（-delete），只读白名单不得放行"
+        ],
+        "saferAlternative": "改为只读诊断命令，先收集状态与日志证据。",
+        "normalizedInput": "find /var/log -name '*.log.*' -o -name '*.gz' -o -name '*.old' -type f -mtime +30 -delete",
+        "originalInputHash": "e27ae39ca3779b94a0f402dc0569c1c72c2236c706d2055d96b769a6e6259f7b"
+      },
+      {
+        "command": "rm -rf /var/log/anaconda/*.log",
+        "level": "BLOCK",
+        "action": "DENY",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "blockedPattern"
+        ],
+        "reasons": [
+          "递归强制删除（rm -rf），极高风险"
+        ],
+        "saferAlternative": "改为只读诊断命令，先收集状态与日志证据。",
+        "normalizedInput": "rm -rf /var/log/anaconda/*.log",
+        "originalInputHash": "13f272737c29751e5df07a9781be79b412ff710a9461fef18d2732b549e5e20c"
+      },
+      {
+        "command": "df -h /var/log",
+        "level": "READONLY",
+        "action": "ALLOW",
+        "requiresApproval": false,
+        "requiresBackup": false,
+        "requiresDryRun": false,
+        "matchedRules": [
+          "readOnly"
+        ],
+        "reasons": [
+          "只读/感知类指令"
+        ],
+        "saferAlternative": "",
+        "normalizedInput": "df -h /var/log",
+        "originalInputHash": "0c17904bc3242dd8b41b784fb6bd112f1574dc5ef6b13d0fa3e2c77a2339eca4"
+      }
+    ],
+    "execResults": [
+      {
+        "command": "journalctl --vacuum-size=200M",
+        "level": "READONLY",
+        "reason": "只读/感知类指令",
+        "executed": true,
+        "exitCode": 0,
+        "dryRun": false,
+        "output": "\n[output-audit] 完整 0 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/409d86df-400b-4bc2-bce7-4a8eda8120f1-stdout.log\n[stderr] Vacuuming done, freed 0B of archived journals from /run/log/journal/43382b81919748b9be5c4dfcdbec3c52.\nVacuuming done, freed 0B of archived journals from /run/log/journal.\n\n[output-audit] 完整 171 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/409d86df-400b-4bc2-bce7-4a8eda8120f1-stderr.log"
+      },
+      {
+        "command": "find /var/log -name '*.log.*' -o -name '*.gz' -o -name '*.old' -type f -mtime +30 -delete",
+        "level": "BLOCK",
+        "reason": "find 参数包含删除、执行或写文件动作（-delete），只读白名单不得放行",
+        "executed": false,
+        "output": "命中安全红线，已拒绝执行"
+      },
+      {
+        "command": "rm -rf /var/log/anaconda/*.log",
+        "level": "BLOCK",
+        "reason": "递归强制删除（rm -rf），极高风险",
+        "executed": false,
+        "output": "命中安全红线，已拒绝执行"
+      },
+      {
+        "command": "df -h /var/log",
+        "level": "READONLY",
+        "reason": "只读/感知类指令",
+        "executed": true,
+        "exitCode": 0,
+        "dryRun": false,
+        "output": "文件系统               大小  已用  可用 已用% 挂载点\n/dev/mapper/klas-root   93G   11G   83G   11% /\n\n[output-audit] 完整 116 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/924124f0-5d5a-4a33-9c82-fa01248c94e0-stdout.log\n[stderr] \n[output-audit] 完整 0 bytes 已落盘: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/exec-output/924124f0-5d5a-4a33-9c82-fa01248c94e0-stderr.log"
+      }
+    ],
+    "analysis": "【问题】清理 /var/log 下的旧日志\n【根因假设】日志未配置轮转或清理策略，导致历史日志持续累积，但当前空间充足，清理为预防性操作。\n【处置思路】清理 /var/log 下旧日志，当前总大小 38M，主要占用为 ksaf(12M)、anaconda(6.9M)、sa(2.4M)，系统日志 journald 未限制，磁盘使用率 11% 正常。\n【置信度】0.95\n【执行与证据】\n  - journalctl --vacuum-size=200M => READONLY(已执行)\n  - find /var/log -name '*.log.*' -o -name '*.gz' -o -na
+... (truncated)
