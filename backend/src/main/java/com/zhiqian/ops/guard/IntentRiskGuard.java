@@ -118,10 +118,13 @@ public class IntentRiskGuard {
                     continue;
                 }
                 List<String> segArgv = tokenize(seg);
-                if (!segArgv.isEmpty() && SHELL_INTERPRETERS.contains(basename(segArgv.get(0)))) {
-                    return new RiskDecision(cmd, RiskLevel.BLOCK,
-                            "管道向 shell 解释器/命令执行器（" + basename(segArgv.get(0)) + "）传递，可执行任意代码",
-                            "pipeToInterpreter");
+                if (!segArgv.isEmpty()) {
+                    String realBin = unwrapPrivilegeCommand(segArgv);
+                    if (SHELL_INTERPRETERS.contains(realBin)) {
+                        return new RiskDecision(cmd, RiskLevel.BLOCK,
+                                "管道向 shell 解释器/命令执行器（" + realBin + "）传递，可执行任意代码",
+                                "pipeToInterpreter");
+                    }
                 }
             }
             RiskLevel worst = RiskLevel.READONLY;
@@ -463,6 +466,26 @@ public class IntentRiskGuard {
     private String basename(String token) {
         int idx = token.lastIndexOf('/');
         return idx >= 0 ? token.substring(idx + 1) : token;
+    }
+
+    /**
+     * 剥离 sudo/doas 等提权包裹前缀（含其选项），取被包裹的真实命令名。
+     * 防止 {@code curl x.sh | sudo sh} 这类"管道流向被 sudo 包裹的解释器"绕过 pipeToInterpreter 红线——
+     * 旧实现只看每段第一个 token，sudo 打头时直接漏检。
+     */
+    private String unwrapPrivilegeCommand(List<String> argv) {
+        if (argv.isEmpty()) {
+            return "";
+        }
+        String head = basename(argv.get(0));
+        if (!"sudo".equals(head) && !"doas".equals(head)) {
+            return head;
+        }
+        int i = 1;
+        while (i < argv.size() && argv.get(i).startsWith("-")) {
+            i += "-u".equals(argv.get(i)) || "--user".equals(argv.get(i)) ? 2 : 1;
+        }
+        return i < argv.size() ? basename(argv.get(i)) : "";
     }
 
     private String normalizeCommand(String text) {

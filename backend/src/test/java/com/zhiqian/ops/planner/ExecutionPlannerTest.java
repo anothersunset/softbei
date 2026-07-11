@@ -89,6 +89,41 @@ class ExecutionPlannerTest {
     }
 
     @Test
+    void enable_and_unmask_probe_enablement_not_running_state() throws Exception {
+        // P2 修复：enable/unmask 只改变"开机启动"配置，不代表服务当前在运行；
+        // 用 is-active 会把"已启用但当前手动停止"的服务误判 VERIFY_FAILED，必须改用 is-enabled。
+        ExecutionPlanner planner = new ExecutionPlanner(new IntentRiskGuard(new RiskRuleLoader()));
+
+        ExecutionPlanner.VerifySpec enable = planner.deriveVerification("systemctl enable nginx");
+        assertEquals(List.of("systemctl", "is-enabled", "nginx"), enable.argv());
+        assertTrue(enable.passed(0));
+
+        ExecutionPlanner.VerifySpec unmask = planner.deriveVerification("systemctl unmask nginx");
+        assertEquals(List.of("systemctl", "is-enabled", "nginx"), unmask.argv());
+        assertTrue(unmask.passed(0));
+
+        // 对照：start/restart/reload 仍是真正的运行时动作，保持 is-active 语义不变
+        ExecutionPlanner.VerifySpec reload = planner.deriveVerification("systemctl reload nginx");
+        assertEquals(List.of("systemctl", "is-active", "nginx"), reload.argv());
+    }
+
+    @Test
+    void non_terminating_kill_signals_skip_verification() throws Exception {
+        // P2 修复：kill -CHLD/-HUP 等通知类信号进程约定处理后通常继续运行，
+        // 不能假设"发出即应退出"（如 Mock 僵尸回收计划里的 kill -CHLD 4321），应跳过而非误判失败。
+        ExecutionPlanner planner = new ExecutionPlanner(new IntentRiskGuard(new RiskRuleLoader()));
+
+        assertNull(planner.deriveVerification("kill -CHLD 4321"));
+        assertNull(planner.deriveVerification("kill -HUP 4321"));
+        assertNull(planner.deriveVerification("kill -SIGHUP 4321"));
+
+        // 对照：真正的终止性信号（含默认无参 TERM）仍应断言进程退出
+        assertTrue(planner.deriveVerification("kill 4321").passed(1));
+        assertTrue(planner.deriveVerification("kill -9 4321").passed(1));
+        assertTrue(planner.deriveVerification("kill -KILL 4321").passed(1));
+    }
+
+    @Test
     void applies_verification_results_to_verify_task_status() throws Exception {
         ExecutionPlanner planner = new ExecutionPlanner(new IntentRiskGuard(new RiskRuleLoader()));
         PlanResult plan = new PlanResult();

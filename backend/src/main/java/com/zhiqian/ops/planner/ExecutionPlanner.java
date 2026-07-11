@@ -10,6 +10,7 @@ import com.zhiqian.ops.retriever.Evidence;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -164,7 +165,14 @@ public class ExecutionPlanner {
                 if (t.length >= 3 && isSafeToken(t[2])) {
                     String action = t[1];
                     String unit = t[2];
-                    if (List.of("start", "restart", "reload", "unmask", "enable").contains(action)) {
+                    if (List.of("enable", "unmask").contains(action)) {
+                        // enable/unmask 只改变"开机启动"配置，不代表服务当前在运行；
+                        // 用 is-active 探测会把"已启用但当前手动停止"的服务误判 VERIFY_FAILED，
+                        // 改用只关心启用状态、不关心运行状态的 is-enabled。
+                        return new VerifySpec(List.of("systemctl", "is-enabled", unit),
+                                "exit0", "服务 " + unit + " 应已启用（is-enabled，不要求当前处于运行状态）");
+                    }
+                    if (List.of("start", "restart", "reload").contains(action)) {
                         return new VerifySpec(List.of("systemctl", "is-active", unit),
                                 "exit0", "服务 " + unit + " 应处于 active 状态");
                     }
@@ -195,6 +203,12 @@ public class ExecutionPlanner {
             case "kill" -> {
                 String pid = t[t.length - 1];
                 if (pid.matches("\\d+")) {
+                    // 只有终止性信号才能断言"进程应退出"；CHLD/HUP/USR1/USR2/WINCH/CONT
+                    // 等通知类信号是进程按约定处理后继续运行的常见手法(如僵尸回收用 kill -CHLD、
+                    // 服务重载用 kill -HUP)，没有可靠的复核预期，跳过而非误判 VERIFY_FAILED。
+                    if (isNonTerminatingSignal(killSignal(t))) {
+                        return null;
+                    }
                     return new VerifySpec(List.of("ps", "-p", pid), "nonzero", "进程 " + pid + " 应已退出");
                 }
             }
@@ -249,6 +263,38 @@ public class ExecutionPlanner {
     /** 探针入参白名单字符校验：防止把元字符/空白注入到模板命令。 */
     private boolean isSafeToken(String s) {
         return s != null && !s.isBlank() && s.matches("[A-Za-z0-9._/@:-]+");
+    }
+
+    /** 通知类信号：进程按约定处理后通常继续运行，不代表"应已退出"。 */
+    private static final Set<String> NON_TERMINATING_SIGNALS = Set.of(
+            "CHLD", "17", "HUP", "1", "USR1", "10", "USR2", "12", "WINCH", "28", "CONT", "18");
+
+    private boolean isNonTerminatingSignal(String signal) {
+        return NON_TERMINATING_SIGNALS.contains(signal);
+    }
+
+    /** 解析 kill 命令实参中的信号名（去 SIG 前缀、转大写）；未显式指定时 kill 默认发送 TERM。 */
+    private String killSignal(String[] t) {
+        for (int i = 1; i < t.length - 1; i++) {
+            String arg = t[i];
+            if (arg.startsWith("--signal=")) {
+                return normalizeSignal(arg.substring("--signal=".length()));
+            }
+            if ("--signal".equals(arg) || "-s".equals(arg)) {
+                if (i + 1 < t.length - 1) {
+                    return normalizeSignal(t[i + 1]);
+                }
+            }
+            if (arg.startsWith("-") && arg.length() > 1) {
+                return normalizeSignal(arg.substring(1));
+            }
+        }
+        return "TERM";
+    }
+
+    private String normalizeSignal(String s) {
+        String up = s.toUpperCase(Locale.ROOT);
+        return up.startsWith("SIG") ? up.substring(3) : up;
     }
 
     private String baseName(String bin) {

@@ -37,6 +37,14 @@ public class RcaLlmSummarizer {
         }
         try {
             String out = llm.chat(buildPrompt(report, rca));
+            // 主备降级兜底：enabled() 只是调用前的静态判断（配置了真实 provider 就算 true），
+            // 但主模型若此刻不可用，FailoverLlmClient 会在这次 chat() 内部静默降级到本地 Mock；
+            // Mock 返回的是固定运维计划 JSON，不是自然语言根因总结，绝不能当作 llmSummary 使用。
+            // providerName() 反映"这次调用实际生效"的委托，此处据此做调用后的兜底判断。
+            String actualProvider = llm.providerName();
+            if (actualProvider != null && actualProvider.toLowerCase(java.util.Locale.ROOT).contains("mock")) {
+                return null;
+            }
             return out == null || out.isBlank() ? null : out.trim();
         } catch (Exception e) {
             return null;
