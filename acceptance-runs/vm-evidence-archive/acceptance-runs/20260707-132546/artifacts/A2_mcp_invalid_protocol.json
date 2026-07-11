@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "error": {
+    "message": "无效请求：jsonrpc 必须为 \"2.0\"",
+    "code": -32600
+  }
+}
