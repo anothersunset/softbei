@@ -97,8 +97,5 @@ Base URL: http://127.0.0.1:18081
 [PASS] C1-05    app-log-captured - /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/ops-agent.log
 
 == Acceptance artifacts ==
-Report: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/acceptance-report.md
-Summary: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/summary.json
-Recording: /home/vmuser/softbei-main-latest/softbei-main/acceptance-runs/20260707-132546/terminal.typescript
-
-脚本完成于 2026-07-07 13:27:15+08:00 [COMMAND_EXIT_CODE="0"]
+Re
+... (truncated)
