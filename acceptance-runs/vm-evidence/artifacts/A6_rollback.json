@@ -1,0 +1,17 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "traceId": "c6b3c22f-7d55-4041-9b66-a0689d4dc6b5",
+    "message": "已按动作账本回放补偿指令（dry-run 默认开启；真实回滚需关闭 dry-run 并人工确认）",
+    "results": [
+      {
+        "origin": "systemctl restart nginx",
+        "reversible": false,
+        "manual": "restart 无幂等逆操作，如需回滚请依据变更前状态手动恢复服务 nginx",
+        "rolledBack": false,
+        "note": "需人工恢复（见 manual 指引）"
+      }
+    ]
+  }
+}
