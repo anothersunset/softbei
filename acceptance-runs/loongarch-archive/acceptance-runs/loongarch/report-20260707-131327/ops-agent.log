@@ -1,0 +1,31 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.4)
+
+2026-07-07T13:14:15.505+08:00  INFO 1062294 --- [ops-agent] [           main] com.zhiqian.ops.OpsAgentApplication      : Starting OpsAgentApplication v1.0.0 using Java 17.0.18 with PID 1062294 (/home/vmuser/softbei-main-latest/softbei-main/backend/target/ops-agent.jar started by vmuser in /home/vmuser/softbei-main-latest/softbei-main/backend)
+2026-07-07T13:14:15.509+08:00  INFO 1062294 --- [ops-agent] [           main] com.zhiqian.ops.OpsAgentApplication      : No active profile set, falling back to 1 default profile: "default"
+2026-07-07T13:14:18.153+08:00  INFO 1062294 --- [ops-agent] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 18080 (http)
+2026-07-07T13:14:18.179+08:00  INFO 1062294 --- [ops-agent] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-07-07T13:14:18.180+08:00  INFO 1062294 --- [ops-agent] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.30]
+2026-07-07T13:14:18.251+08:00  INFO 1062294 --- [ops-agent] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-07-07T13:14:18.252+08:00  INFO 1062294 --- [ops-agent] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 2617 ms
+2026-07-07T13:14:18.762+08:00  INFO 1062294 --- [ops-agent] [           main] com.zhiqian.ops.guard.RiskRuleLoader     : loaded risk rules: 11 blocked patterns, 16 critical paths, 13 critical services, 39 injection patterns
+2026-07-07T13:14:18.822+08:00  INFO 1062294 --- [ops-agent] [           main] com.zhiqian.ops.exec.RollbackLedger      : 断点续跑：从 logs/state/rollback-ledger.jsonl 恢复 5 条回滚账本
+2026-07-07T13:14:19.070+08:00  INFO 1062294 --- [ops-agent] [           main] com.zhiqian.ops.llm.LlmClientFactory     : using mock LLM client (no api-key configured or provider=mock)
+2026-07-07T13:14:19.095+08:00  INFO 1062294 --- [ops-agent] [           main] c.z.ops.retriever.ContextRetriever       : ContextRetriever 就绪：静态知识 18 条
+2026-07-07T13:14:19.127+08:00  INFO 1062294 --- [ops-agent] [           main] com.zhiqian.ops.pipeline.OpsPipeline     : 断点续跑：从 logs/state/pending-plans.jsonl 恢复 3 条待确认计划
+2026-07-07T13:14:19.242+08:00  INFO 1062294 --- [ops-agent] [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-07-07T13:14:20.433+08:00  INFO 1062294 --- [ops-agent] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 4 endpoints beneath base path '/actuator'
+2026-07-07T13:14:20.602+08:00  INFO 1062294 --- [ops-agent] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 18080 (http) with context path '/'
+2026-07-07T13:14:20.632+08:00  INFO 1062294 --- [ops-agent] [           main] com.zhiqian.ops.OpsAgentApplication      : Started OpsAgentApplication in 6.163 seconds (process running for 7.226)
+2026-07-07T13:14:20.768+08:00  INFO 1062294 --- [ops-agent] [.1-18080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-07-07T13:14:20.769+08:00  INFO 1062294 --- [ops-agent] [.1-18080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-07-07T13:14:20.770+08:00  INFO 1062294 --- [ops-agent] [.1-18080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-07-07T13:14:23.577+08:00  INFO 1062294 --- [ops-agent] [.1-18080-exec-1] c.z.ops.exec.LeastPrivilegeExecutor      : [dry-run] skip mutating command: systemctl restart nginx
+2026-07-07T13:14:26.162+08:00  INFO 1062294 --- [ops-agent] [.1-18080-exec-3] c.z.ops.exec.LeastPrivilegeExecutor      : [dry-run] skip mutating command: systemctl restart nginx
