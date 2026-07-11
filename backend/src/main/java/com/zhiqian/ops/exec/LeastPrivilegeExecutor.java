@@ -52,16 +52,56 @@ public class LeastPrivilegeExecutor {
         return exec(argv, true);
     }
 
-    /** 执行变更类命令（dry-run 打开时不真正执行；接入熔断兜底）。 */
+    /** 执行只读多段管道（不受 dry-run 与熔断影响）。 */
     public ExecResult runReadOnlyPipeline(List<List<String>> pipeline) {
-        long start = System.currentTimeMillis();
         if (pipeline == null || pipeline.isEmpty()) {
             return new ExecResult(-1, "", "empty command", false, 0);
         }
         if (pipeline.size() == 1) {
             return runReadOnly(pipeline.get(0));
         }
+        return executePipelineStages(pipeline);
+    }
 
+    /**
+     * 执行已批准的变更类多段管道（dry-run 打开时不真正执行；接入熔断兜底）。
+     * 供人工确认后的管道命令使用（如 {@code cat /etc/passwd | tee /tmp/x}）——
+     * 若仍走单进程 {@link #run(List)}，ProcessBuilder 不解释 shell 语义，
+     * "|" 会被当成字面参数传给第一个二进制，管道右侧的写入永远不会真正发生。
+     */
+    public ExecResult runPipeline(List<List<String>> pipeline) {
+        long start = System.currentTimeMillis();
+        if (pipeline == null || pipeline.isEmpty()) {
+            return new ExecResult(-1, "", "empty command", false, 0);
+        }
+        if (pipeline.size() == 1) {
+            return run(pipeline.get(0));
+        }
+        if (props.isDryRun()) {
+            String joined = pipeline.stream()
+                    .map(argv -> String.join(" ", argv))
+                    .reduce((a, b) -> a + " | " + b)
+                    .orElse("");
+            log.info("[dry-run] skip mutating pipeline: {}", joined);
+            return new ExecResult(0, "[dry-run] 已跳过实际执行：" + joined, "", true, System.currentTimeMillis() - start);
+        }
+        if (!breaker.allowExecution()) {
+            long leftSec = breaker.remainingCooldownMillis() / 1000;
+            log.warn("[circuit-open] 熔断中，拒绝变更类管道执行");
+            return new ExecResult(-1, "", "[circuit-open] 连续失败已触发熔断，暂停高危执行约 " + leftSec + "s，请人工介入排查后再试", false, System.currentTimeMillis() - start);
+        }
+        ExecResult result = executePipelineStages(pipeline);
+        if (result.success()) {
+            breaker.recordSuccess();
+        } else {
+            breaker.recordFailure();
+        }
+        return result;
+    }
+
+    /** 多段管道的核心 fork/pipe/wait 逻辑，供只读与变更两条入口复用；调用方各自负责 dry-run/熔断判断。 */
+    private ExecResult executePipelineStages(List<List<String>> pipeline) {
+        long start = System.currentTimeMillis();
         List<Process> processes = new ArrayList<>();
         List<CompletableFuture<String>> stderrDrains = new ArrayList<>();
         List<CompletableFuture<Void>> pumps = new ArrayList<>();

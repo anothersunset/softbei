@@ -145,14 +145,19 @@ public class OpsAuditService {
         return out;
     }
 
+    /**
+     * 落盘前先做字段级脱敏（对 Map 递归 sanitizeValue），再序列化为 JSON——
+     * 而不是反过来对已序列化的整行 JSON 字符串跑正则。后者一旦秘密值后面
+     * 紧跟 JSON 结构字符（无自然空白分隔，如 newTrace 的 instruction 本身
+     * 就以秘密值结尾），"非空白贪婪匹配"会一路吃穿闭合引号/逗号/后续字段，
+     * 产出损坏的 JSONL 行；字段级脱敏只在单个字符串值内部替换，不会跨到
+     * JSON 语法上，从根上消除该风险。
+     */
     private synchronized void writeLine(Map<String, Object> line) {
         try {
             rotateIfNeeded();
-            String json = mapper.writeValueAsString(line);
-            if (sanitizer != null) {
-                json = sanitizer.sanitize(json);
-            }
-            json = json + "\n";
+            Object safeLine = sanitizer == null ? line : sanitizer.sanitizeValue(line);
+            String json = mapper.writeValueAsString(safeLine) + "\n";
             Files.write(traceFile, json.getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {

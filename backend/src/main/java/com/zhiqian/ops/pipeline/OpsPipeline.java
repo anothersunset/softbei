@@ -685,9 +685,16 @@ public class OpsPipeline {
                             er.put("preBackup", backups);
                         }
                     }
-                    ExecResult res = d.level() == RiskLevel.READONLY
-                            ? runReadOnlySafely(d.command(), argv)
-                            : executor.run(argv);
+                    ExecResult res;
+                    if (d.level() == RiskLevel.READONLY) {
+                        res = runReadOnlySafely(d.command(), argv);
+                    } else {
+                        // 已批准的单组纯管道命令（如 cat /etc/passwd | tee /tmp/x）不能再走
+                        // 单进程 run(argv)：ProcessBuilder 不解释 shell 语义，"|" 会被当成字面
+                        // 参数传给第一个二进制，管道右侧的写入永远不会真正发生却报告 executed=true。
+                        List<List<String>> mutatingPipeline = mutatingPipelineStagesOrNull(d.command());
+                        res = mutatingPipeline != null ? executor.runPipeline(mutatingPipeline) : executor.run(argv);
+                    }
                     executedCount++;
                     er.put("executed", true);
                     er.put("exitCode", res.exitCode());
@@ -846,6 +853,30 @@ public class OpsPipeline {
         }
         return new ExecResult(lastExit, stdout.toString(), stderr.toString(), false,
                 System.currentTimeMillis() - start);
+    }
+
+    /**
+     * 已批准的变更命令若是单组纯管道（仅 {@code |} 连接、不含 {@code ;}/{@code &&} 混合），
+     * 拆成多段 argv 供 {@link LeastPrivilegeExecutor#runPipeline} 以真实 OS 管道执行；
+     * 其余情形（非管道、或含 {@code ;}/{@code &&} 的混合复合命令）返回 null，
+     * 调用方回退单进程执行，保持既有行为——不扩大本次修复范围。
+     * 复用 {@link #parseReadOnlyChain} 的纯语法解析（该方法本身不做只读性校验，
+     * 只读性检查是 {@link #runReadOnlySafely} 在解析结果之上另加的一层，与此处无关）。
+     */
+    private List<List<String>> mutatingPipelineStagesOrNull(String command) {
+        CommandChain chain = parseReadOnlyChain(command);
+        if (chain.error() != null || !chain.compound() || chain.groups().size() != 1) {
+            return null;
+        }
+        List<CommandStage> stages = chain.groups().get(0).stages();
+        if (stages.size() < 2) {
+            return null;
+        }
+        List<List<String>> pipeline = new ArrayList<>();
+        for (CommandStage stage : stages) {
+            pipeline.add(stage.argv());
+        }
+        return pipeline;
     }
 
     private void appendOut(StringBuilder target, String value) {
