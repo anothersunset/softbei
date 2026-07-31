@@ -1,31 +1,53 @@
 /*
  * 实时思维链（Live Chain-of-Thought）客户端
- * 通过 fetch 订阅 GET /api/ops/chat/stream，实时渲染安全护栏九阶段的逐步执行（类 ChatGPT tool_call 展示）。
+ * 通过 fetch 订阅 GET /api/ops/chat/stream，实时渲染安全护栏十一阶段的逐步执行（类 ChatGPT tool_call 展示）。
  * 不依赖也不修改 app.js；所需样式与阶段进度条 DOM 均由本文件动态注入，不依赖 index.html 的结构调整。
  */
 (function () {
-  var STAGE_ORDER = ['RECEIVE', 'INJECTION_GUARD', 'SENSE', 'RETRIEVE', 'REASON', 'PLAN', 'GUARD', 'EXECUTE', 'ANALYZE'];
+  var STAGE_ORDER = ['RECEIVE', 'INJECTION_GUARD', 'SENSE', 'DISK_CANDIDATE_GATE', 'RETRIEVE', 'REASON', 'PLAN', 'GUARD', 'CROSS_TURN_GUARD', 'EXECUTE', 'ANALYZE'];
   var STAGE_LABEL = {
     RECEIVE: '接收指令',
     INJECTION_GUARD: '抗提示词注入',
     SENSE: '环境感知',
+    DISK_CANDIDATE_GATE: '磁盘候选门禁',
     RETRIEVE: '知识检索',
     REASON: '推理决策',
     PLAN: '任务规划',
     GUARD: '安全校验',
+    CROSS_TURN_GUARD: '跨轮攻击防护',
     EXECUTE: '最小权限执行',
     ANALYZE: '根因分析'
   };
   var STATUS_LABEL = {
-    INJECTION_BLOCKED: '已拦截注入',
-    BLOCKED: '已拒绝执行',
+    INJECTION_BLOCKED: '注入已拦截',
+    BLOCKED: '已拒绝·安全红线',
     REVIEW_PENDING: '待人工确认',
-    EXECUTED: '已闭环执行'
+    OBSERVED: '只读完成',
+    PLAN_FAILED: '计划生成失败',
+    PIPELINE_FAILED: '链路异常',
+    DRY_RUN_COMPLETED: '模拟执行完成·未改系统',
+    EXECUTION_FAILED: '执行失败',
+    EXECUTED_UNVERIFIED: '已执行·待验证',
+    VERIFY_FAILED: '验证失败',
+    VERIFIED: '已完成并验证通过',
+    CLARIFICATION_REQUIRED: '需补充澄清',
+    UNKNOWN: '状态未知',
+    EXECUTED: '已执行'
   };
   var STATUS_CLASS = {
     INJECTION_BLOCKED: 'block',
     BLOCKED: 'block',
     REVIEW_PENDING: 'review',
+    OBSERVED: 'safe',
+    PLAN_FAILED: 'block',
+    PIPELINE_FAILED: 'block',
+    DRY_RUN_COMPLETED: 'review',
+    EXECUTION_FAILED: 'block',
+    EXECUTED_UNVERIFIED: 'review',
+    VERIFY_FAILED: 'block',
+    VERIFIED: 'safe',
+    CLARIFICATION_REQUIRED: 'review',
+    UNKNOWN: 'block',
     EXECUTED: 'safe'
   };
 
@@ -35,6 +57,8 @@
     + '.streampipe .spp.done{color:var(--safe);border-color:color-mix(in srgb,var(--safe) 40%,var(--line));background:color-mix(in srgb,var(--safe) 9%,#fff)}'
     + '.streampipe .spp.active{color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}'
     + '.streampipe .spp.halt{color:var(--block);border-color:var(--block);background:color-mix(in srgb,var(--block) 10%,#fff)}'
+    + '.streampipe .spp.spp-hold{color:var(--review);border-color:var(--review);background:color-mix(in srgb,var(--review) 10%,#fff)}'
+    + '.streampipe .spp.spp-after{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,#fff)}'
     + '.streampipe .spp-sep{width:9px;height:1px;background:var(--line);flex-shrink:0;margin:0 2px}'
     + '.secsco-w{margin-top:12px}'
     + '.rb-led{margin-top:16px}'
@@ -103,7 +127,7 @@
     }
   }
 
-  /** 渲染九阶段实时进度条：已完成点亮为绿色，被拦截阶段标红，下一阶段为 active。 */
+  /** 渲染十一阶段实时进度条：已完成点亮为绿色，被拦截阶段标红，下一阶段为 active。 */
   function renderPipe() {
     var pipe = $('streamPipe');
     if (!pipe) return;
@@ -211,7 +235,7 @@
   function renderLedger(plan, status) {
     if (!Array.isArray(plan) || plan.length === 0) {
       if (status === 'EXECUTED') {
-        return '<div class="rb-led"><div class="lbl">一键回滚账本</div><div class="rb-none">本次无已执行的变更类操作，无需回滚。</div></div>';
+        return '<div class="rb-led"><div class="lbl">回滚方案账本</div><div class="rb-none">本次无已执行的变更类操作，无需回滚。</div></div>';
       }
       return '';
     }
@@ -220,7 +244,7 @@
       var rev = !!p.reversible;
       if (rev) autoN += 1;
       var badge = rev
-        ? '<span class="badge safe">可自动回滚</span>'
+        ? '<span class="badge safe">可自动模拟回滚</span>'
         : '<span class="badge review">需人工恢复</span>';
       var body = '';
       if (p.compensate) body += '<div class="rb-cmd">补偿命令：<code>' + esc(p.compensate) + '</code></div>';
@@ -235,17 +259,45 @@
         + '</div>';
     }).join('');
     return '<div class="rb-led">'
-      + '<div class="lbl">一键回滚账本 · 共 ' + plan.length + ' 项（可自动 ' + autoN + ' 项）</div>'
+      + '<div class="lbl">回滚方案账本 · 共 ' + plan.length + ' 项（可自动模拟 ' + autoN + ' 项）</div>'
       + '<div class="rb-tl">' + rows + '</div>'
       + '</div>';
   }
 
+  /**
+   * done 事件到达后，用完整响应重新推导各阶段的最终态并覆盖芯片渲染——流式过程中 doneStages/haltStage
+   * 只知道"到没到达"，而 EXECUTE 是否真的处置(拒绝)/等待人工需要读 execResults 等字段（与 app.js 的
+   * deriveStageStates 同一套判定逻辑，见设计文档「链路可视化与威胁评分改造」§1.6）。
+   * app.js 早于本文件加载，deriveStageStates 是全局函数；找不到时静默跳过，不影响流式过程本身已渲染的芯片。
+   */
+  function applyFinalPipeState(resp) {
+    if (typeof deriveStageStates !== 'function') return;
+    var pipe = $('streamPipe');
+    if (!pipe) return;
+    var derived = deriveStageStates(resp, resp.steps || []);
+    var chips = STAGE_ORDER.map(function (s) {
+      var state = derived.states[s] || '';
+      var cls = 'spp';
+      if (state === 'done') cls += ' done';
+      else if (state === 'block') cls += ' halt';
+      else if (state === 'hold') cls += ' spp-hold';
+      else if (state === 'aftermath') cls += ' spp-after';
+      var label = STAGE_LABEL[s] || s;
+      var sub = derived.subs[s];
+      return '<span class="' + cls + '">' + esc(label) + (sub ? ' · ' + esc(sub) : '') + '</span>';
+    });
+    pipe.innerHTML = chips.join('<i class="spp-sep"></i>');
+  }
+
   function renderDone(resp) {
+    if (typeof updateSessionStatus === 'function') { try { updateSessionStatus(resp); } catch (e) {} }
+    applyFinalPipeState(resp);
     var wrap = $('streamDone');
     if (!wrap) return;
     var st = resp.status || 'EXECUTED';
     var cls = STATUS_CLASS[st] || '';
-    var sec = resp.securityScore || {};
+    var threat = resp.threatAssessment || null;
+    var sec = resp.securityScore || null;
     var parts = [];
     parts.push('<div class="statbar ' + cls + '" style="margin-top:14px">'
       + '<span class="sig"></span>'
@@ -253,15 +305,22 @@
       + '<span class="msg">' + esc(resp.message || '') + '</span>'
       + (resp.traceId ? '<span class="tid mono">' + esc(resp.traceId) + '</span>' : '')
       + '</div>');
-    // 安全评分三维条（静态风险 / 动态意图审计 / 受限执行）
-    parts.push(renderScore(sec));
+    // 威胁指数卡片优先（与 app.js 主结果页同一套渲染，两个 tab 视觉一致）；threatAssessment
+    // 缺失（app.js 未加载或旧响应）时逐级回退到本文件的纯文本版评分条。
+    if (typeof threatCardHtml === 'function' && threat && threat.index != null) {
+      parts.push(threatCardHtml(threat, sec));
+    } else if (typeof legacyScoreCardHtml === 'function' && sec && sec.score != null) {
+      parts.push(legacyScoreCardHtml(sec));
+    } else {
+      parts.push(renderScore(sec || {}));
+    }
     if (resp.analysis) {
       parts.push('<div class="analysis" style="margin-top:12px">' + esc(resp.analysis) + '</div>');
     }
     // 回滚账本可视化（时间线）
     parts.push(renderLedger(resp.rollbackPlan, st));
     if (resp.traceId) {
-      parts.push('<div style="margin-top:12px"><button class="btn btn-warn" style="width:auto" onclick="streamRollback(\'' + esc(resp.traceId) + '\')">一键回滚（dry-run）</button> '
+      parts.push('<div style="margin-top:12px"><button class="btn btn-warn" style="width:auto" onclick="streamRollback(\'' + esc(resp.traceId) + '\')">模拟回滚并检查</button> '
         + '<span id="streamRbMsg" style="font-size:12px;color:var(--faint);margin-left:8px"></span></div>');
     }
     wrap.innerHTML = parts.join('');
@@ -321,7 +380,9 @@
       }
     }, 2500);
     try {
-      var r = await apiFetch('/api/ops/chat/stream?instruction=' + encodeURIComponent(v), {
+      var sid = (typeof opsSessionId !== 'undefined' && opsSessionId) ? opsSessionId : '';
+      var r = await apiFetch('/api/ops/chat/stream?instruction=' + encodeURIComponent(v)
+        + (sid ? '&sessionId=' + encodeURIComponent(sid) : ''), {
         signal: streamController.signal,
         headers: { 'Accept': 'text/event-stream' }
       });

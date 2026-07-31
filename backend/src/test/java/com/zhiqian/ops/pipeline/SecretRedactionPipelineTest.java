@@ -52,7 +52,13 @@ class SecretRedactionPipelineTest {
                 new MockLlmClient(), new RootCauseAnalyzer(), audit, executor,
                 List.of(new FakeSenseTool()), new ContextRetriever(audit, rules),
                 execProps, sanitizer,
-                new McpDispatcher(new ToolRegistry(List.of(new FakeSenseTool())), sanitizer));
+                new McpDispatcher(new ToolRegistry(List.of(new FakeSenseTool())), sanitizer),
+                new com.zhiqian.ops.pipeline.SessionStore(new com.zhiqian.ops.guard.CrossTurnProperties()),
+                new com.zhiqian.ops.guard.CrossTurnThreatMonitor(new com.zhiqian.ops.guard.CrossTurnProperties()),
+                new com.zhiqian.ops.guard.CrossTurnProperties(),
+                new com.zhiqian.ops.guard.DiskCandidateClassifier(rules),
+                new com.zhiqian.ops.agent.tools.DiskCandidateProperties(),
+                new com.zhiqian.ops.agent.tools.IoActivityProperties());
 
         ChatRequest req = new ChatRequest();
         req.setInstruction("帮我查看系统状态，password=vm-secret-token");

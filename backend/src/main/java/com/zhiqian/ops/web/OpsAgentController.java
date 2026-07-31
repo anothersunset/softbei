@@ -13,6 +13,7 @@ import com.zhiqian.ops.guard.RiskLevel;
 import com.zhiqian.ops.guard.RollbackAdvisor;
 import com.zhiqian.ops.guard.SecurityScorer;
 import com.zhiqian.ops.guard.SensitiveDataSanitizer;
+import com.zhiqian.ops.guard.ThreatAssessor;
 import com.zhiqian.ops.llm.LlmClient;
 import com.zhiqian.ops.pipeline.ChatRequest;
 import com.zhiqian.ops.pipeline.ChatResponse;
@@ -23,8 +24,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,6 +52,7 @@ public class OpsAgentController {
     private final SensitiveDataSanitizer sanitizer;
     private final IntentRiskGuard guard;
     private final SecurityScorer securityScorer = new SecurityScorer();
+    private final ThreatAssessor threatAssessor = new ThreatAssessor();
     private final CounterfactualAnalyzer counterfactual = new CounterfactualAnalyzer();
     private final RollbackAdvisor rollbackAdvisor = new RollbackAdvisor();
 
@@ -85,12 +91,80 @@ public class OpsAgentController {
         }
         resp.setSecurityScore(securityScorer.score(
                 injectionBlocked, worst, resp.getDecisions(), resp.getExecResults(), resp.getStatus()));
-        resp.setCounterfactual(counterfactual.analyze(resp.getDecisions()));
+        List<com.zhiqian.ops.guard.ImpactEstimate> impacts = counterfactual.analyze(resp.getDecisions());
+        resp.setCounterfactual(impacts);
+        resp.setThreatAssessment(threatAssessor.assess(
+                injectionBlocked, resp.getInjection(), worst, resp.getDecisions(), impacts));
 
         // 动作账本：为已执行的变更类指令生成补偿/回滚计划，并登记以支持一键回滚
         List<Map<String, Object>> ledger = rollbackAdvisor.buildLedger(resp.getDecisions(), resp.getExecResults());
         resp.setRollbackPlan(ledger);
         rollbackLedger.record(resp.getTraceId(), ledger);
+    }
+
+    /**
+     * 查看单条命令的完整落盘输出（stdout/stderr）。
+     * 前端结果框仅展示前 {@code output-preview-bytes} 预览，完整输出流式落盘在 {@code output-audit-dir}；
+     * 本接口按 execId 回读完整文件。安全约束：execId 仅保留 [A-Za-z0-9._-]、去除路径分隔符，
+     * 拼接固定 {@code -stdout.log}/{@code -stderr.log} 后缀，并强制限制在审计目录内，杜绝目录穿越读任意文件。
+     * dry-run 未真实执行的命令没有落盘文件，接口返回 available=false 并说明原因。
+     */
+    @GetMapping("/exec-output")
+    public Result<Map<String, Object>> execOutput(@RequestParam String execId,
+                                                  @RequestParam(defaultValue = "stdout") String stream) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        String s = "stderr".equalsIgnoreCase(stream) ? "stderr" : "stdout";
+        out.put("stream", s);
+        String safeId = execId == null ? "" : execId.replaceAll("[^A-Za-z0-9._-]", "");
+        if (safeId.isEmpty()) {
+            out.put("available", false);
+            out.put("message", "无效的执行标识");
+            return Result.ok(out);
+        }
+        out.put("execId", safeId);
+        String dir = execProperties == null || execProperties.getOutputAuditDir() == null
+                || execProperties.getOutputAuditDir().isBlank()
+                ? "logs/exec-output" : execProperties.getOutputAuditDir();
+        Path base = Path.of(dir).toAbsolutePath().normalize();
+        Path file = base.resolve(safeId + "-" + s + ".log").normalize();
+        if (!file.startsWith(base)) {
+            out.put("available", false);
+            out.put("message", "路径越界，已拒绝");
+            return Result.ok(out);
+        }
+        out.put("path", file.toString());
+        if (!Files.exists(file)) {
+            out.put("available", false);
+            out.put("message", "未找到落盘文件：可能是 dry-run 未真实执行（导出 OPS_EXEC_DRY_RUN=false 后重试），或文件已被清理。");
+            return Result.ok(out);
+        }
+        try {
+            long size = Files.size(file);
+            long maxBytes = 5L * 1024 * 1024;
+            String content;
+            boolean truncated = false;
+            if (size > maxBytes) {
+                byte[] buf = new byte[(int) maxBytes];
+                try (java.io.InputStream in = Files.newInputStream(file)) {
+                    int read = 0, n;
+                    while (read < buf.length && (n = in.read(buf, read, buf.length - read)) != -1) {
+                        read += n;
+                    }
+                    content = new String(buf, 0, read, StandardCharsets.UTF_8);
+                }
+                truncated = true;
+            } else {
+                content = Files.readString(file, StandardCharsets.UTF_8);
+            }
+            out.put("available", true);
+            out.put("size", size);
+            out.put("truncated", truncated);
+            out.put("content", sanitizer == null ? content : sanitizer.sanitize(content));
+        } catch (Exception e) {
+            out.put("available", false);
+            out.put("message", "读取失败：" + e.getMessage());
+        }
+        return Result.ok(out);
     }
 
     @GetMapping("/tools")
@@ -150,13 +224,7 @@ public class OpsAgentController {
                     results.add(r);
                     continue;
                 }
-                // restore-backup 条目的 compensate 命令由 PreChangeBackup 自行生成（cp <受控备份路径> <原路径>），
-                // 两端路径均非模型/用户输入，且恢复目标就是此前已被批准执行过的变更命令的原路径——
-                // 属于我们完全可控的补偿动作，而非任意外部命令，因此单独放行 EXECUTABLE 级（BLOCK 仍照常拒绝，
-                // 意外升级为 IRREVERSIBLE 的情形仍需人工确认，不做无条件豁免）。
-                boolean autoRestorable = "restore-backup".equals(item.get("action"))
-                        && decision.level() == RiskLevel.EXECUTABLE;
-                if (decision.level().requiresApproval() && !autoRestorable) {
+                if (decision.level().requiresApproval()) {
                     r.put("rolledBack", false);
                     r.put("requiresApproval", true);
                     r.put("output", "补偿命令需人工确认，请通过主运维链路执行并保留影响记录：" + decision.reason());

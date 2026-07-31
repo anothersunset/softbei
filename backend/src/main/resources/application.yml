@@ -52,6 +52,36 @@ ops:
     zombie-critical: 5
     log-error-warn: 20
     log-error-critical: 100
+  # 跨轮渐进式攻击检测：确定性规则、不调模型；累积可疑度达阈值即将该会话降级为只读。
+  # 真机调参改这里的环境变量即可，无需重新编译。
+  # 磁盘清理候选：文件级感知阈值与门禁触发条件（配合 DiskCandidateGateNode 的意图关键词判断）
+  disk-candidate:
+    min-size-mb: ${OPS_DISK_CANDIDATE_MIN_SIZE_MB:50}
+    max-candidates: ${OPS_DISK_CANDIDATE_MAX:10}
+    find-max-depth: ${OPS_DISK_CANDIDATE_MAX_DEPTH:6}
+  # 实时文件活跃度差分采样：两点快照识别正在增长/缩小/新增的文件（io_activity_sense 工具）
+  io-activity:
+    default-window-ms: ${OPS_IO_ACTIVITY_WINDOW_MS:2000}
+    min-window-ms: ${OPS_IO_ACTIVITY_MIN_WINDOW_MS:200}
+    max-window-ms: ${OPS_IO_ACTIVITY_MAX_WINDOW_MS:5000}
+    find-max-depth: ${OPS_IO_ACTIVITY_MAX_DEPTH:6}
+    max-tracked-files: ${OPS_IO_ACTIVITY_MAX_TRACKED:20}
+    max-lsof-probes: ${OPS_IO_ACTIVITY_MAX_LSOF_PROBES:5}
+    # 磁盘候选表 RECOMMENDED 档增长复检：数量×窗口=候选表生成的额外延迟，默认 3×2s≈6s
+    candidate-probe-count: ${OPS_IO_ACTIVITY_CANDIDATE_PROBES:3}
+    candidate-probe-window-ms: ${OPS_IO_ACTIVITY_CANDIDATE_WINDOW_MS:2000}
+  cross-turn:
+    injection-hit-score: ${OPS_CROSSTURN_INJECTION_HIT_SCORE:40}
+    risk-escalation-score: ${OPS_CROSSTURN_RISK_ESCALATION_SCORE:15}
+    target-jump-score: ${OPS_CROSSTURN_TARGET_JUMP_SCORE:20}
+    weak-signal-score: ${OPS_CROSSTURN_WEAK_SIGNAL_SCORE:10}
+    decay-per-turn: ${OPS_CROSSTURN_DECAY_PER_TURN:5}
+    lockdown-threshold: ${OPS_CROSSTURN_LOCKDOWN_THRESHOLD:60}
+    history-window-turns: ${OPS_CROSSTURN_HISTORY_WINDOW:6}
+    session-ttl-minutes: ${OPS_CROSSTURN_SESSION_TTL_MINUTES:30}
+    # 诊断证据继承窗口：独立于上面的攻击检测窗口，更小——证据是系统状态快照，窗口越大越容易过时
+    evidence-window-turns: ${OPS_CROSSTURN_EVIDENCE_WINDOW:2}
+    evidence-max-chars-per-turn: ${OPS_CROSSTURN_EVIDENCE_MAX_CHARS:800}
   trace:
     file: ${OPS_TRACE_FILE:logs/ops-trace.jsonl}
     # 溯源 JSONL 轮转阈值（字节）：活动文件超过后归档为 ops-trace-<epochMillis>.jsonl，防止无限增长

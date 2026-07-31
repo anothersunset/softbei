@@ -114,7 +114,7 @@ public class GuardedMutationExecutor {
 
         // 3. 二次确认门禁：门槛由护栏裁决决定，工具无权降级
         if (worst.requiresApproval() && !confirm) {
-            return pendingReview(toolName, steps, out,
+            return pendingReview(toolName, steps, verifyArgv, out,
                     "变更操作需人工二次确认：请审阅以上风险裁决后携带 pendingMutationId 与 confirm=true 重新调用");
         }
         if (worst.requiresApproval()) {
@@ -122,7 +122,7 @@ public class GuardedMutationExecutor {
             String signature = signature(toolName, steps);
             PendingMutation pending = pendingMutationId == null ? null : pendingMutations.remove(pendingMutationId);
             if (pending == null || !pending.toolName().equals(toolName) || !pending.signature().equals(signature)) {
-                return pendingReview(toolName, steps, out,
+                return pendingReview(toolName, steps, verifyArgv, out,
                         "confirm=true 需要匹配服务端已登记的 pendingMutationId；本次请求未执行，已返回新的待确认 id");
             }
         }
@@ -235,11 +235,31 @@ public class GuardedMutationExecutor {
         return String.join(" && ", cmds);
     }
 
+    /**
+     * 查询尚未过期的待确认计划。变更工具在 confirm 阶段只能复用这一份已经呈现给人工的
+     * argv/复核计划，不能重新生成带时间戳或随机后缀的命令，否则会破坏「审阅即执行同一计划」
+     * 的安全语义。真正的消费仍由 {@link #execute} 内的签名校验完成。
+     */
+    public PendingPlan pendingPlan(String toolName, String pendingMutationId) {
+        if (toolName == null || pendingMutationId == null || pendingMutationId.isBlank()) {
+            return null;
+        }
+        evictExpiredPending();
+        PendingMutation pending = pendingMutations.get(pendingMutationId);
+        if (pending == null || !toolName.equals(pending.toolName())) {
+            return null;
+        }
+        return new PendingPlan(pending.steps(), pending.verifyArgv());
+    }
+
     private Map<String, Object> pendingReview(String toolName, List<List<String>> steps,
-                                              Map<String, Object> out, String message) {
+                                              List<String> verifyArgv, Map<String, Object> out,
+                                              String message) {
         evictExpiredPending();
         String id = UUID.randomUUID().toString();
-        pendingMutations.put(id, new PendingMutation(toolName, signature(toolName, steps), System.currentTimeMillis()));
+        pendingMutations.put(id, new PendingMutation(toolName, signature(toolName, steps),
+                copySteps(steps), verifyArgv == null ? List.of() : List.copyOf(verifyArgv),
+                System.currentTimeMillis()));
         out.put("status", "REVIEW_PENDING");
         out.put("executed", false);
         out.put("pendingMutationId", id);
@@ -273,5 +293,16 @@ public class GuardedMutationExecutor {
         return String.join("\u001E", parts);
     }
 
-    private record PendingMutation(String toolName, String signature, long createdAtMs) {}
+    private List<List<String>> copySteps(List<List<String>> steps) {
+        if (steps == null || steps.isEmpty()) {
+            return List.of();
+        }
+        return steps.stream().map(List::copyOf).toList();
+    }
+
+    /** 待确认计划的不可变快照，仅供同一工具在确认前回填既有计划。 */
+    public record PendingPlan(List<List<String>> steps, List<String> verifyArgv) {}
+
+    private record PendingMutation(String toolName, String signature, List<List<String>> steps,
+                                   List<String> verifyArgv, long createdAtMs) {}
 }

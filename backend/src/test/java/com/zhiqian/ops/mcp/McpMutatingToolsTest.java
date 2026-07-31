@@ -180,6 +180,21 @@ class McpMutatingToolsTest {
     }
 
     @Test
+    void log_rotate_confirmation_reuses_the_reviewed_plan_after_time_has_passed() throws Exception {
+        Map<String, Object> pending = callTool("log_rotate", Map.of("path", "/var/log/demo.log"));
+        String pendingId = String.valueOf(pending.get("pendingMutationId"));
+        String reviewedArchive = String.valueOf(pending.get("archive"));
+
+        // 必须跨越秒级时间戳，防止“同一秒巧合复用归档名”掩盖待确认计划重建缺陷。
+        Thread.sleep(1_050L);
+
+        Map<String, Object> confirmed = callTool("log_rotate",
+                Map.of("path", "/var/log/demo.log", "confirm", true, "pendingMutationId", pendingId));
+        assertEquals("EXECUTED", confirmed.get("status"));
+        assertEquals(reviewedArchive, confirmed.get("archive"), "确认阶段必须复用人工已审阅的归档路径");
+    }
+
+    @Test
     void log_rotate_rejects_symbolic_links_in_live_mode() throws Exception {
         props.setDryRun(false);
         Path target = tmp.resolve("real-secret.log");

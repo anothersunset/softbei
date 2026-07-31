@@ -51,7 +51,9 @@ public class DeepSeekLlmClient implements LlmClient {
             ArrayNode messages = body.putArray("messages");
             ObjectNode sys = messages.addObject();
             sys.put("role", "system");
-            sys.put("content", "你是谨慎的 Linux 运维专家。只返回严格的 JSON，字段：summary, rootCauseHypothesis, confidence(0~1), steps[{command, purpose}]。不要输出 JSON 以外的任何内容。");
+            sys.put("content", "你是谨慎的 Linux 运维专家。只返回严格的 JSON，字段：summary, rootCauseHypothesis, confidence(0~1), steps[{command, purpose}]。"
+                    + "命令中禁止添加 sudo、su、doas 等提权包装器，权限由受控执行器统一管理。"
+                    + "服务变更前应先给出只读状态/配置检查，变更后给出只读复核命令。不要输出 JSON 以外的任何内容。");
             ObjectNode user = messages.addObject();
             user.put("role", "user");
             user.put("content", prompt);

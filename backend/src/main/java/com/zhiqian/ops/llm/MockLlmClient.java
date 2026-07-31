@@ -34,8 +34,23 @@ public class MockLlmClient implements LlmClient {
         String explicit = detectExplicitCommand(instruction);
         String criticalDelete = detectCriticalDelete(instruction);
         String pipeCommand = detectPipeCommand(instruction);
+        String selectedDiskTargets = detectSelectedDiskTargets(instruction);
 
-        if (criticalDelete != null) {
+        if (selectedDiskTargets != null) {
+            // 用户已从磁盘候选表中选定具体文件（见 OpsPipeline.runWithSelection 拼接的标记文本），
+            // 针对选定路径逐一生成删除步骤，不再套用硬编码的演示路径。优先级最高——
+            // 这是系统自己构造的确定性标记，比关键词/正则启发式更可信。
+            List<String> paths = List.of(selectedDiskTargets.split("、"));
+            for (String p : paths) {
+                String trimmed = p.trim();
+                if (!trimmed.isEmpty()) {
+                    steps.add(new PlanStep("rm -f " + trimmed, "清理用户已从候选表中选定的文件"));
+                }
+            }
+            r.setSummary("已根据用户在候选表中的选择，生成针对性清理方案");
+            r.setRootCauseHypothesis("用户已确认清理目标：" + selectedDiskTargets);
+            r.setConfidence(0.9);
+        } else if (criticalDelete != null) {
             // 演示误删关键数据目录 -> 预期被护栏 BLOCK
             steps.add(new PlanStep(criticalDelete, "用户要求删除目标路径下的内容"));
             r.setSummary("检测到针对关键路径的删除意图，已生成计划交由安全护栏校验");
@@ -56,10 +71,18 @@ public class MockLlmClient implements LlmClient {
         } else if (lc.contains("清理") || lc.contains("垃圾") || lc.contains("磁盘") || lc.contains("空间") || lc.contains("满") || lc.contains("disk")) {
             steps.add(new PlanStep("df -h", "查看各文件系统使用率，确认告警分区"));
             steps.add(new PlanStep("du -h --max-depth=1 /var/log", "定位 /var/log 下占用最大的目录"));
-            steps.add(new PlanStep("rm -f /var/log/app/app.log.1", "删除已轮转的历史日志以释放空间"));
-            r.setSummary("磁盘空间告急，拟定位并清理已轮转日志");
-            r.setRootCauseHypothesis("/var/log 下日志未及时轮转，占满磁盘分区");
-            r.setConfidence(0.82);
+            if (hasActionMarker(instruction)) {
+                steps.add(new PlanStep("rm -f /var/log/app/app.log.1", "删除已轮转的历史日志以释放空间"));
+                r.setSummary("磁盘空间告急，拟定位并清理已轮转日志");
+                r.setRootCauseHypothesis("/var/log 下日志未及时轮转，占满磁盘分区");
+                r.setConfidence(0.82);
+            } else {
+                // 纯诊断问题（如"为什么磁盘满了""磁盘什么情况"）：只出只读步骤，不主动生成变更计划，
+                // 保证 worstLevel 全程 READONLY、不落入 REVIEW_PENDING。
+                r.setSummary("已定位磁盘占用较高的目录，如需清理请明确告知（如「帮我清理一下」）");
+                r.setRootCauseHypothesis("/var/log 下日志未及时轮转，占满磁盘分区（诊断结论，尚未生成变更计划）");
+                r.setConfidence(0.75);
+            }
         } else if (lc.contains("僵尸") || lc.contains("zombie") || lc.contains("defunct")) {
             steps.add(new PlanStep("ps -el", "列出进程状态，查找状态为 Z 的僵尸进程"));
             steps.add(new PlanStep("ps -o pid,ppid,stat,cmd --ppid 1", "定位僵尸进程的父进程"));
@@ -125,6 +148,37 @@ public class MockLlmClient implements LlmClient {
         boolean hasPipe = s.contains("|") && !s.contains("||");
         if (hasPipe && s.matches("^[A-Za-z/][\\w./-]*\\s.*")) {
             return s;
+        }
+        return null;
+    }
+
+    /**
+     * 明确祈使语气的动作短语，用于区分"帮我清理磁盘"（执行请求）和"为什么磁盘满了"（诊断问题）。
+     * 刻意不用裸单字动词（"执行""重启""修复"）——"为什么执行失败了""重启是不是能解决"这类句子里
+     * 动词是讨论对象、不是祈使语气，裸动词匹配会把诊断问题误判成执行请求。拿不准就保守，
+     * 宁可当诊断问题处理，跟 DiskCandidateClassifier"未分类默认落需谨慎"是同一个原则。
+     */
+    private static final Pattern ACTION_MARKERS = Pattern.compile(
+            "帮我处理|帮我清理|清理一下|清一下|清掉|删掉|删除|处理一下|处理下|"
+                    + "执行一下|重启一下|修复一下|马上处理|立刻处理|"
+                    // "清理/释放/腾"紧跟宾语（垃圾/文件/日志/空间/数据/缓存），中间最多容 4 个字（如
+                    // "清理一些垃圾文件""释放一些空间"）——是明确的动宾祈使结构，跟裸动词不同类；
+                    // 间隔卡在 4 个字以内，避免跨小句把"为什么清理没有释放足够空间"这种诊断句也匹配进来。
+                    + "清理.{0,4}(垃圾|文件|日志|空间|数据|缓存)|(释放|腾).{0,4}空间");
+
+    private boolean hasActionMarker(String instruction) {
+        return instruction != null && ACTION_MARKERS.matcher(instruction).find();
+    }
+
+    private static final Pattern SELECTED_DISK_TARGETS =
+            Pattern.compile("已从候选中选定以下文件执行清理：([^）]+)）");
+
+    /** 解析 OpsPipeline.runWithSelection 拼接的"已选定"标记文本，提取用户选定的路径（顿号分隔）。 */
+    private String detectSelectedDiskTargets(String instruction) {
+        if (instruction == null) return null;
+        Matcher m = SELECTED_DISK_TARGETS.matcher(instruction);
+        if (m.find()) {
+            return m.group(1).trim();
         }
         return null;
     }

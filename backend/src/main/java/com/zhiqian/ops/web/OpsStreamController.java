@@ -7,6 +7,7 @@ import com.zhiqian.ops.guard.RiskDecision;
 import com.zhiqian.ops.guard.RiskLevel;
 import com.zhiqian.ops.guard.RollbackAdvisor;
 import com.zhiqian.ops.guard.SecurityScorer;
+import com.zhiqian.ops.guard.ThreatAssessor;
 import com.zhiqian.ops.pipeline.ChatRequest;
 import com.zhiqian.ops.pipeline.ChatResponse;
 import com.zhiqian.ops.pipeline.OpsPipeline;
@@ -42,6 +43,7 @@ public class OpsStreamController {
     private final OpsPipeline pipeline;
     private final RollbackLedger rollbackLedger;
     private final SecurityScorer securityScorer = new SecurityScorer();
+    private final ThreatAssessor threatAssessor = new ThreatAssessor();
     private final CounterfactualAnalyzer counterfactual = new CounterfactualAnalyzer();
     private final RollbackAdvisor rollbackAdvisor = new RollbackAdvisor();
     private final ExecutorService sseExecutor = new ThreadPoolExecutor(
@@ -62,12 +64,14 @@ public class OpsStreamController {
     @GetMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@RequestParam String instruction,
                              @RequestParam(required = false, defaultValue = "false") boolean confirm,
-                             @RequestParam(required = false) String traceId) {
+                             @RequestParam(required = false) String traceId,
+                             @RequestParam(required = false) String sessionId) {
         SseEmitter emitter = new SseEmitter(120_000L);
         ChatRequest req = new ChatRequest();
         req.setInstruction(instruction);
         req.setConfirm(confirm);
         req.setTraceId(traceId);
+        req.setSessionId(sessionId);
 
         try {
             sseExecutor.submit(() -> {
@@ -135,7 +139,10 @@ public class OpsStreamController {
         }
         resp.setSecurityScore(securityScorer.score(
                 injectionBlocked, worst, resp.getDecisions(), resp.getExecResults(), resp.getStatus()));
-        resp.setCounterfactual(counterfactual.analyze(resp.getDecisions()));
+        List<com.zhiqian.ops.guard.ImpactEstimate> impacts = counterfactual.analyze(resp.getDecisions());
+        resp.setCounterfactual(impacts);
+        resp.setThreatAssessment(threatAssessor.assess(
+                injectionBlocked, resp.getInjection(), worst, resp.getDecisions(), impacts));
 
         // 动作账本：为已执行的变更类指令生成补偿/回滚计划，并登记以支持一键回滚
         List<Map<String, Object>> ledger = rollbackAdvisor.buildLedger(resp.getDecisions(), resp.getExecResults());

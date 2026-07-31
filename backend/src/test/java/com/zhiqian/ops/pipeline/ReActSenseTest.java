@@ -99,7 +99,13 @@ class ReActSenseTest {
         McpDispatcher dispatcher = new McpDispatcher(new ToolRegistry(tools), sanitizer);
         return new OpsPipeline(new AgentRunner(sanitizer), new PromptInjectionDetector(rules), guard, llm,
                 new RootCauseAnalyzer(), audit, executor, tools,
-                new ContextRetriever(audit, rules), execProps, sanitizer, dispatcher);
+                new ContextRetriever(audit, rules), execProps, sanitizer, dispatcher,
+                new com.zhiqian.ops.pipeline.SessionStore(new com.zhiqian.ops.guard.CrossTurnProperties()),
+                new com.zhiqian.ops.guard.CrossTurnThreatMonitor(new com.zhiqian.ops.guard.CrossTurnProperties()),
+                new com.zhiqian.ops.guard.CrossTurnProperties(),
+                new com.zhiqian.ops.guard.DiskCandidateClassifier(rules),
+                new com.zhiqian.ops.agent.tools.DiskCandidateProperties(),
+                new com.zhiqian.ops.agent.tools.IoActivityProperties());
     }
 
     @Test

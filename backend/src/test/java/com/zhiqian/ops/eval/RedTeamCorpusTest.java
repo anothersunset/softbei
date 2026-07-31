@@ -74,9 +74,15 @@ class RedTeamCorpusTest {
         int pass = 0;
         for (JsonNode c : cases) {
             String id = c.path("id").asText();
+            int before = failures.size();
             try {
                 validator.accept(c, failures);
-                pass++;
+                // 校验闭包既可能直接向 failures 追加失败信息（不抛异常），也可能直接抛 AssertionError；
+                // 两种写法都要能让本用例计入失败——之前的实现只认「抛异常」这一种，导致 4 个分项测试
+                // 无论底层检测器/护栏返回什么都恒为 100% 通过，红队语料回归形同虚设。
+                if (failures.size() == before) {
+                    pass++;
+                }
             } catch (AssertionError e) {
                 failures.add(id + " " + e.getMessage());
             }

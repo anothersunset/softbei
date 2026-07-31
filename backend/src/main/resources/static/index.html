@@ -13,7 +13,7 @@
     --line:#dde4ee; --line-soft:#edf1f6;
     --text:#172033; --dim:#5d6878; --faint:#8792a2;
     --accent:#2f5f9f; --accent-2:#6c89bc; --accent-soft:rgba(47,95,159,.12);
-    --safe:#2f8a5d; --review:#9b6a16; --block:#bf4558;
+    --safe:#2f8a5d; --review:#9b6a16; --high:#c1631f; --block:#bf4558;
     --shadow:0 18px 48px rgba(22,32,51,.08);
     --r:10px;
   }
@@ -69,6 +69,14 @@
   .btn-warn{border-color:color-mix(in srgb,var(--review) 38%,var(--line));color:var(--review);background:color-mix(in srgb,var(--review) 7%,#fff)}
   .btn-warn:hover:not(:disabled){background:color-mix(in srgb,var(--review) 12%,#fff)}
   .row{margin-top:10px}
+  .strong-confirm{border:1px solid color-mix(in srgb,var(--high) 42%,var(--line));border-radius:11px;padding:12px;background:color-mix(in srgb,var(--high) 6%,#fff)}
+  .strong-confirm .sc-title{font-size:13px;font-weight:800;color:var(--high);margin-bottom:6px}
+  .strong-confirm .sc-copy{font-size:11.5px;color:var(--dim);line-height:1.65}
+  .strong-confirm ul{margin:7px 0 9px;padding-left:18px;font-size:11.5px;color:var(--dim)}
+  .strong-confirm label{display:flex;align-items:flex-start;gap:7px;font-size:11.5px;color:var(--dim);line-height:1.5;margin:8px 0}
+  .strong-confirm input[type="checkbox"]{margin-top:2px;accent-color:var(--high)}
+  .strong-confirm input[type="text"]{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:#fff;color:var(--text);font:inherit;font-size:12px;margin-bottom:9px}
+  .strong-confirm input[type="text"]:focus{outline:2px solid color-mix(in srgb,var(--high) 25%,transparent);border-color:var(--high)}
   .scl{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin:18px 0 10px;font-weight:700}
   .scen{display:grid;gap:8px}
   .scen button{display:flex;align-items:center;gap:10px;text-align:left;border:1px solid var(--line);background:var(--surface-2);
@@ -80,6 +88,7 @@
   .tag.irreversible,.badge.irreversible{color:#8b2f44;background:color-mix(in srgb,var(--block) 9%,#fff);border-color:color-mix(in srgb,var(--block) 22%,transparent)}
   .tag.block,.badge.block{color:var(--block);background:color-mix(in srgb,var(--block) 12%,#fff);border-color:color-mix(in srgb,var(--block) 24%,transparent)}
   .badge.gray{color:var(--faint);background:var(--line-soft);border-color:var(--line)}
+  .tag.high,.badge.high{color:var(--high);background:color-mix(in srgb,var(--high) 12%,#fff);border-color:color-mix(in srgb,var(--high) 24%,transparent)}
   .kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .kpi .k{text-align:center;padding:11px 5px;background:var(--surface-2);border-right:1px solid var(--line)}
   .kpi .k:last-child{border-right:none}
@@ -110,6 +119,21 @@
     -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;animation:spin 1.6s linear infinite}
   .stage.block .node{color:var(--block);border-color:var(--block);background:color-mix(in srgb,var(--block) 10%,#fff)}
   .stage.block .nm{color:var(--block)}
+  .stage.hold .node{color:var(--review);border-color:var(--review);background:color-mix(in srgb,var(--review) 10%,#fff)}
+  .stage.hold .nm{color:var(--review)}
+  .stage.aftermath .node{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,#fff)}
+  .stage.aftermath .nm{color:var(--accent)}
+  .stage .sub{font-size:10px;margin-top:2px;color:var(--dim);white-space:nowrap}
+  .stage.pending{opacity:.3}
+  .stage.lit{opacity:1;transition:opacity .25s ease}
+  .pipe-legend{display:flex;gap:14px;flex-wrap:wrap;padding:6px 2px 0;font-size:11px;color:var(--faint)}
+  .pipe-legend .lg{display:inline-flex;align-items:center;gap:5px}
+  .pipe-legend .lg i{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+  .pipe-legend .lg.done i{background:var(--safe)}
+  .pipe-legend .lg.block i{background:var(--block)}
+  .pipe-legend .lg.hold i{background:var(--review)}
+  .pipe-legend .lg.aftermath i{background:var(--accent)}
+  .pipe-legend .lg.idle i{background:transparent;border:1px solid var(--line)}
   @keyframes spin{to{--ang:360deg}}
   .tabs{display:flex;gap:2px;padding:0 14px;border-bottom:1px solid var(--line-soft);overflow-x:auto}
   .tab{padding:13px 10px;font-size:11px;letter-spacing:.85px;text-transform:uppercase;color:var(--faint);cursor:pointer;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.18s;white-space:nowrap;background:transparent}
@@ -167,6 +191,8 @@
   .secsco .radar{flex-shrink:0}.secsco .hd{display:flex;align-items:baseline;gap:6px}
   .secsco .sc{font-size:30px;font-weight:760;line-height:1}.secsco .gr{font-size:13px;font-weight:750;margin-left:4px}
   .secsco.a .sc,.secsco.a .gr{color:var(--safe)}.secsco.b .sc,.secsco.b .gr{color:var(--accent)}.secsco.c .sc,.secsco.c .gr{color:var(--review)}.secsco.d .sc,.secsco.d .gr{color:var(--block)}
+  .secsco.t-low .sc{color:var(--safe)}.secsco.t-mid .sc{color:var(--review)}.secsco.t-high .sc{color:var(--high)}.secsco.t-critical .sc{color:var(--block)}
+  .dutylist{margin:11px 0 0;padding:0;list-style:none}.dutylist li{font-size:11.5px;color:var(--dim);padding:3px 0 3px 18px;position:relative}.dutylist li::before{content:"✓";position:absolute;left:0;top:1px;color:var(--safe);font-weight:800;font-size:11px}
   .secsco .dims{margin-top:12px;display:grid;gap:8px}.secsco .dim{display:grid;grid-template-columns:82px 1fr 56px;align-items:center;gap:10px}
   .secsco .dn{font-size:11px;color:var(--dim)}.secsco .bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden}.secsco .bar>i{display:block;height:100%;border-radius:4px}
   .secsco .bar.s>i{background:var(--safe)}.secsco .bar.d>i{background:var(--accent)}.secsco .bar.e>i{background:var(--review)}
@@ -188,6 +214,28 @@
   @media(max-width:980px){.wrap{padding:20px 18px 30px}.top{align-items:flex-start;flex-direction:column}.meta{justify-content:flex-start}.grid{grid-template-columns:minmax(0,1fr)}}
   @media(max-width:640px){.wrap{padding:16px 14px 26px}.wm{align-items:flex-start}.wm .mark{width:39px;height:39px}.wm h1{font-size:20px}.meta .m{white-space:normal}.cb,.panel{padding:13px}.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .k:nth-child(2){border-right:none}.kpi .k:nth-child(-n+2){border-bottom:1px solid var(--line)}.rt-gauges{grid-template-columns:1fr}.secsco,.gauge{align-items:flex-start;flex-direction:column}.secsco .dim{grid-template-columns:76px 1fr 48px}.statbar{align-items:flex-start;flex-wrap:wrap}.statbar .tid{margin-left:0;text-align:left;width:100%}.tabs{padding:0 10px}.tab{padding:12px 8px}.term .bar{flex-wrap:wrap}.term .bar .t{width:100%;margin-left:0}}
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}.btn-primary:hover{transform:none}.stage.active .node::before{animation:none}}
+  /* 执行结果框：查看完整落盘输出 */
+  .term-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid rgba(255,255,255,.10);background:#111827}
+  .term-btn{border:1px solid #33507a;background:#1c2c47;color:#dbeafe;border-radius:7px;padding:5px 11px;font-size:11.5px;cursor:pointer;transition:.15s}
+  .term-btn:hover{background:#24406b;border-color:#4a6bda}
+  .term-btn.ghost{background:transparent;color:#9fb4d4}
+  .term-btn.ghost:hover{background:rgba(255,255,255,.06);color:#dbeafe}
+  .term-hint{font-size:10.5px;color:#7c8db0;margin-left:auto}
+  /* 落盘输出弹层 */
+  .modal{position:fixed;inset:0;z-index:80}
+  .modal-mask{position:absolute;inset:0;background:rgba(16,24,40,.55)}
+  .modal-card{position:relative;max-width:920px;width:calc(100% - 36px);margin:44px auto 0;max-height:calc(100vh - 88px);
+    display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .modal-hd{display:flex;align-items:center;gap:10px;padding:12px 15px;border-bottom:1px solid var(--line-soft)}
+  .modal-title{font-size:13px;font-weight:750;white-space:nowrap}
+  .modal-tabs{display:flex;gap:4px;margin-left:4px}
+  .modal-tab{border:1px solid var(--line);background:var(--surface-2);color:var(--dim);border-radius:7px;padding:5px 11px;font-size:11.5px;cursor:pointer;transition:.15s}
+  .modal-tab.on{color:#fff;background:var(--accent);border-color:var(--accent)}
+  .modal-x{margin-left:auto;border:0;background:transparent;color:var(--faint);font-size:15px;cursor:pointer;padding:4px 9px;border-radius:6px;line-height:1}
+  .modal-x:hover{background:var(--line-soft);color:var(--text)}
+  .modal-meta{padding:8px 15px;font-size:11px;color:var(--faint);border-bottom:1px solid var(--line-soft);word-break:break-all}
+  .modal-body{margin:0;padding:14px 15px;font-size:12px;line-height:1.62;color:#24344d;white-space:pre-wrap;word-break:break-word;overflow:auto;background:var(--surface-2);flex:1}
+  @media(max-width:640px){.modal-card{margin:16px auto 0;width:calc(100% - 20px);max-height:calc(100vh - 32px)}.modal-hd{flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -213,10 +261,27 @@
       <section class="card">
         <div class="ch"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10M7 12h6"/><path d="M21 12a9 9 0 1 1-3.6-7.2"/></svg></span><h2>自然语言运维指令</h2></div>
         <div class="cb">
+          <div class="row" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span id="sessionStatus" style="font-size:12px;color:var(--faint);display:flex;align-items:center;gap:6px"><span class="dot on"></span> 会话：正常</span>
+            <button class="btn btn-warn" type="button" onclick="newSession()" style="width:auto;padding:6px 12px;font-size:12.5px" title="放弃当前对话，清空跨轮检测上下文与只读降级状态，重新开始">新会话</button>
+          </div>
+          <div id="lockdownBanner" class="statbar block" style="display:none;margin-top:10px">
+            <span class="sig"></span><span class="stt">会话已降级为只读</span><span class="msg" id="lockdownMsg"></span>
+          </div>
           <label class="lbl" for="instr">输入指令</label>
           <textarea id="instr" placeholder="例如：服务器负载很高，帮我看看现在是什么情况"></textarea>
           <div class="row"><button id="sendBtn" class="btn btn-primary" type="button" onclick="sendChat(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>执行运维指令</button></div>
-          <div class="row" id="confirmRow" style="display:none"><button class="btn btn-warn" type="button" onclick="sendChat(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>人工确认并执行</button></div>
+          <div class="row" id="confirmRow" style="display:none">
+            <button id="standardConfirmBtn" class="btn btn-warn" type="button" onclick="sendChat(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>人工确认并执行</button>
+            <div id="strongConfirmBox" class="strong-confirm" style="display:none">
+              <div class="sc-title">高影响操作 · 强确认</div>
+              <div class="sc-copy">系统将在执行前完成只读预检并记录恢复点；任一检查失败都会停止真实执行。</div>
+              <ul id="strongPreflightList"></ul>
+              <label><input id="strongConfirmCheck" type="checkbox">我已核对目标、影响范围和恢复点要求，并确认本次操作由我本人发起。</label>
+              <input id="strongConfirmInput" type="text" autocomplete="off" placeholder="请输入：我已核对影响并确认执行">
+              <button id="strongConfirmBtn" class="btn btn-warn" type="button" onclick="sendChat(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>完成强确认并执行</button>
+            </div>
+          </div>
           <div class="scl">演示场景</div>
           <div class="scen" id="scen"></div>
         </div>
@@ -227,9 +292,9 @@
         <div class="cb">
           <div class="kpi">
             <div class="k total"><div class="n" id="sTotal">0</div><div class="t">总指令</div></div>
-            <div class="k safe"><div class="n" id="sSafe">0</div><div class="t">Readonly</div></div>
-            <div class="k review"><div class="n" id="sReview">0</div><div class="t">Approval</div></div>
-            <div class="k block"><div class="n" id="sBlock">0</div><div class="t">Block</div></div>
+            <div class="k safe"><div class="n" id="sSafe">0</div><div class="t">只读</div></div>
+            <div class="k review"><div class="n" id="sReview">0</div><div class="t">需确认</div></div>
+            <div class="k block"><div class="n" id="sBlock">0</div><div class="t">已拦截</div></div>
           </div>
         </div>
       </section>
@@ -242,10 +307,17 @@
 
     <section>
       <section class="card">
-        <div class="ch"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2-6 4 12 2-6h4"/></svg></span><h2>八阶段安全闭环</h2></div>
+        <div class="ch"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2-6 4 12 2-6h4"/></svg></span><h2>十一阶段安全闭环</h2></div>
         <div class="cb">
           <div id="loader" class="loader" aria-hidden="true"><i></i></div>
           <div id="pipe" class="pipe" aria-label="执行阶段"></div>
+          <div id="pipeLegend" class="pipe-legend">
+            <span class="lg done"><i></i>放行</span>
+            <span class="lg block"><i></i>拦截</span>
+            <span class="lg hold"><i></i>待人工</span>
+            <span class="lg aftermath"><i></i>处置(拒绝/复盘)</span>
+            <span class="lg idle"><i></i>未运行</span>
+          </div>
         </div>
       </section>
 
@@ -315,6 +387,23 @@
 
   <div class="foot">OpsGuard Agent · REST + MCP · dry-run first</div>
 </div>
+
+<div id="outModal" class="modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="outModalTitle">
+  <div class="modal-mask" onclick="closeExecOutput()"></div>
+  <div class="modal-card">
+    <div class="modal-hd">
+      <span id="outModalTitle" class="modal-title">完整落盘输出</span>
+      <div class="modal-tabs">
+        <button id="outTabStdout" type="button" class="modal-tab on" onclick="switchExecStream('stdout')">标准输出</button>
+        <button id="outTabStderr" type="button" class="modal-tab" onclick="switchExecStream('stderr')">错误输出</button>
+      </div>
+      <button type="button" class="modal-x" onclick="closeExecOutput()" aria-label="关闭">✕</button>
+    </div>
+    <div id="outModalMeta" class="modal-meta"></div>
+    <pre id="outModalBody" class="modal-body">加载中…</pre>
+  </div>
+</div>
+
 <script src="./app.js"></script>
 <script src="./stream.js"></script>
 </body>

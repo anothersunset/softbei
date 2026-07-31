@@ -55,9 +55,10 @@ class PendingPlanPersistenceTest {
         confirm.setInstruction("确认执行");
         confirm.setTraceId(pending.getTraceId());
         confirm.setConfirm(true);
+        confirm.setHighImpactConfirmation(OpsPipeline.HIGH_IMPACT_CONFIRMATION);
         ChatResponse executed = restarted.chat(confirm);
 
-        assertEquals("EXECUTED", executed.getStatus());
+        assertEquals("DRY_RUN_COMPLETED", executed.getStatus());
         assertEquals(pending.getTraceId(), executed.getTraceId());
         assertEquals("systemctl restart nginx", executed.getDecisions().get(0).command());
 
@@ -94,7 +95,13 @@ class PendingPlanPersistenceTest {
                 new ContextRetriever(audit, rules),
                 execProps,
                 sanitizer,
-                new McpDispatcher(new ToolRegistry(List.of(new FakeSenseTool())), sanitizer));
+                new McpDispatcher(new ToolRegistry(List.of(new FakeSenseTool())), sanitizer),
+                new com.zhiqian.ops.pipeline.SessionStore(new com.zhiqian.ops.guard.CrossTurnProperties()),
+                new com.zhiqian.ops.guard.CrossTurnThreatMonitor(new com.zhiqian.ops.guard.CrossTurnProperties()),
+                new com.zhiqian.ops.guard.CrossTurnProperties(),
+                new com.zhiqian.ops.guard.DiskCandidateClassifier(rules),
+                new com.zhiqian.ops.agent.tools.DiskCandidateProperties(),
+                new com.zhiqian.ops.agent.tools.IoActivityProperties());
     }
 
     private static final class FakeSenseTool implements AgentTool {

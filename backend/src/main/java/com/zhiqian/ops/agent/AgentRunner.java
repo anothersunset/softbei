@@ -42,6 +42,8 @@ public class AgentRunner {
                 out = new HashMap<>();
                 out.put("error", e.getMessage());
                 status = "error";
+                // 传导到共享 state，供最终状态解析器判定为「处理链路异常」而非误报成功。
+                ctx.state().put("pipelineError", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             }
             long elapsed = System.currentTimeMillis() - start;
             String finalStatus = out.containsKey("error") ? "error" : str(out.getOrDefault("_status", status));

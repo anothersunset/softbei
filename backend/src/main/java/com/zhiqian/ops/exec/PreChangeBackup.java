@@ -15,8 +15,9 @@ import java.util.Set;
 
 /**
  * 执行前自动备份：变更类命令真实执行前，把命中的目标文件复制到备份目录，
- * 供回滚账本生成「从备份恢复」的补偿指令（对齐"受限执行环境：执行前自动备份+一键回滚"要求）。
- * 仅备份常规文件（目录/设备文件不复制，超限文件跳过并留痕），失败不阻断执行主链路。
+ * 供回滚账本生成「从备份恢复」的补偿指令；补偿动作仍需独立审阅、确认和验证。
+ * 仅备份常规文件（目录/设备文件不复制，超限文件跳过并留痕）。高影响调用方必须检查
+ * {@link BackupOutcome#ready()}，备份或快照不可用时停止真实执行。
  */
 public class PreChangeBackup {
     private static final Logger log = LoggerFactory.getLogger(PreChangeBackup.class);
@@ -36,9 +37,14 @@ public class PreChangeBackup {
      * @return 备份记录列表；每条含 origin 与 backup（成功）或 skipped 原因，空列表表示无可备份目标。
      */
     public List<Map<String, Object>> backup(String traceId, List<String> argv) {
+        return backupWithOutcome(traceId, argv).records();
+    }
+
+    /** 返回可用于高影响执行门禁的结构化备份结果。 */
+    public BackupOutcome backupWithOutcome(String traceId, List<String> argv) {
         List<Map<String, Object>> records = new ArrayList<>();
         if (traceId == null || traceId.isBlank() || argv == null || argv.size() < 2) {
-            return records;
+            return new BackupOutcome(records, false, "缺少 traceId 或变更目标，无法建立恢复点");
         }
         Set<String> candidates = new LinkedHashSet<>();
         for (int i = 1; i < argv.size() && candidates.size() < MAX_FILES_PER_COMMAND; i++) {
@@ -63,11 +69,13 @@ public class PreChangeBackup {
             }
         }
         if (candidates.isEmpty()) {
-            return records;
+            return new BackupOutcome(records, false, "未识别到可自动备份或快照的变更目标");
         }
         String safeTrace = traceId.replaceAll("[^a-zA-Z0-9._-]", "_");
         Path dir = Path.of(backupDir()).resolve(safeTrace).normalize();
         int seq = 0;
+        boolean existingTarget = false;
+        boolean failed = false;
         for (String candidate : candidates) {
             Map<String, Object> r = new LinkedHashMap<>();
             r.put("origin", candidate);
@@ -76,15 +84,18 @@ public class PreChangeBackup {
                 if (!Files.exists(src)) {
                     continue; // 目标不存在（如 mv 目的地）：不是备份对象，也无需留痕
                 }
+                existingTarget = true;
                 if (!Files.isRegularFile(src)) {
                     r.put("skipped", "非常规文件（目录/设备），不自动备份");
                     records.add(r);
+                    failed = true;
                     continue;
                 }
                 long size = Files.size(src);
                 if (size > MAX_FILE_BYTES) {
                     r.put("skipped", "文件 " + size + " bytes 超出备份上限，请人工快照");
                     records.add(r);
+                    failed = true;
                     continue;
                 }
                 Files.createDirectories(dir);
@@ -97,10 +108,22 @@ public class PreChangeBackup {
             } catch (Exception e) {
                 r.put("skipped", "备份失败：" + e.getMessage());
                 records.add(r);
+                failed = true;
                 log.warn("pre-change backup failed for {}: {}", candidate, e.getMessage());
             }
         }
-        return records;
+        boolean copiedExistingTargets = records.stream().anyMatch(r -> r.get("backup") != null);
+        boolean ready = !failed && (!existingTarget || copiedExistingTargets);
+        String reason = ready
+                ? (existingTarget ? "恢复点已建立" : "目标当前不存在，无需备份既有状态")
+                : "至少一个既有变更目标未能建立恢复点";
+        return new BackupOutcome(records, ready, reason);
+    }
+
+    public record BackupOutcome(List<Map<String, Object>> records, boolean ready, String reason) {
+        public BackupOutcome {
+            records = records == null ? List.of() : List.copyOf(records);
+        }
     }
 
     /** 绝对路径判断：Linux 目标环境为 /... 形式；兼容 Windows 盘符路径便于本地开发验证。 */

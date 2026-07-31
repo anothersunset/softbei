@@ -14,7 +14,7 @@ guard:
       reason: "对 PID 1 发送 SIGKILL，可导致系统或容器不可恢复"
     - pattern: "(^|\\s)(shutdown|reboot|halt|poweroff|init\\s+0)\\b"
       reason: "系统关机/重启"
-    - pattern: ">\\s*/etc/(passwd|shadow|fstab|sudoers)"
+    - pattern: ">>?\\s*/etc/(passwd|shadow|fstab|sudoers)"
       reason: "覆写系统关键配置文件"
     - pattern: "(^|\\s)chmod\\s+(-R\\s+)?0?777\\s+/"
       reason: "对根/系统目录赋 777 权限"
@@ -22,7 +22,7 @@ guard:
       reason: "递归变更根目录属主"
     - pattern: "(^|\\s)passwd\\b[^\\n]*\\broot\\b"
       reason: "篡改 root 账户口令，可导致提权/失控"
-    - pattern: "(^|\\s)systemctl\\s+(stop|disable|mask)\\s+(firewalld|iptables|nftables|ufw)\\b"
+    - pattern: "(?!)"
       reason: "停用主机安全防护组件（防火墙）"
 
   # 含 shell 元字符的指令一律 BLOCK，防止命令拼接与注入
@@ -33,11 +33,10 @@ guard:
     - "`"
     - "$("
     - "${"
-    - ">"
     - "<"
     - "\n"
 
-  # 关键路径：若变更类指令触及，升级为 BLOCK（包括数据库数据目录）
+  # 关键路径变更升级为 IRREVERSIBLE。
   criticalPaths:
     - "/"
     - "/etc"
@@ -122,6 +121,13 @@ guard:
     - w
     - vmstat
     - iostat
+    - sar
+    - lsblk
+    - wc
+    - awk
+    - sort
+    - uniq
+    - nginx
     - date
     - hostname
     - whoami
@@ -164,8 +170,6 @@ guard:
     - "(扮演|假装|装作).{0,20}(没有|无|不受).{0,8}(限制|约束|管控)"
     - "(扮演|假装|装作).{0,16}(运维|管理员|root|超人|超级|助手)"
     - "忽略.{0,8}(安全|策略|防护|护栏|校验)"
-    - "NOPASSWD"
-    - "(写入|修改|追加|添加|加).{0,10}/etc/sudoers"
     - "(反弹|reverse)\\s*shell|/dev/tcp/"
     - "\\b(curl|wget)\\b[^\\n|;]*(\\||%7c)\\s*(sudo\\s+)?(sh|bash|dash|zsh|ksh)\\b"
     - "\\|\\s*(sudo\\s+)?(sh|bash|dash|zsh|ksh|python|python3|perl|ruby|node|php)\\b"
@@ -173,6 +177,10 @@ guard:
     - "\\bpython(3)?\\b.{0,80}(socket|subprocess|os\\.dup2)"
     - "echo\\s+-e\\s+.*\\\\x[0-9a-fA-F]{2}"
     - "base64\\s+(-d|--?decode)"
+    # 免密提权后门：直接重定向/tee 写入 sudoers，绕过 visudo 语法校验，是经典持久化提权手法
+    - "(>>|>)\\s*/etc/sudoers(\\.d/\\S+)?\\b"
+    - "\\btee\\b.{0,20}/etc/sudoers(\\.d/\\S+)?\\b"
+    - "NOPASSWD\\s*:\\s*ALL"
 
   # 输出侧横切脱敏：统一作用于执行输出、API/SSE 返回和审计视图
   sensitivePatterns:

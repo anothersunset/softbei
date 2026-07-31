@@ -18,6 +18,8 @@ logs/
 *.log
 ops-trace*.jsonl
 acceptance-runs/
+scripts/opsguard-scenarios-*/
+scripts/opsguard-scenarios-*.tar.gz
 
 # Personal Notion sync artifacts
 NOTION-SYNC.md

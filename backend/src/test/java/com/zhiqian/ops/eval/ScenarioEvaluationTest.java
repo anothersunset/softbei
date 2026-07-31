@@ -2,12 +2,16 @@ package com.zhiqian.ops.eval;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
+import com.zhiqian.ops.exec.ExecResult;
+import com.zhiqian.ops.exec.LeastPrivilegeExecutor;
 import com.zhiqian.ops.pipeline.ChatRequest;
 import com.zhiqian.ops.pipeline.ChatResponse;
 import com.zhiqian.ops.pipeline.OpsPipeline;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.core.io.ClassPathResource;
 
 import java.util.ArrayList;
@@ -18,6 +22,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.when;
 
 /**
  * 安全护栏场景语料批量回放评测。
@@ -29,6 +35,20 @@ class ScenarioEvaluationTest {
 
     @Autowired
     private OpsPipeline pipeline;
+
+    /** 语料评测只验证模型路由与安全决策，执行器固定返回成功以消除宿主 OS 差异。 */
+    @MockBean
+    private LeastPrivilegeExecutor executor;
+
+    @BeforeEach
+    void deterministicExecutor() {
+        when(executor.runReadOnly(anyList()))
+                .thenReturn(new ExecResult(0, "[eval] read-only ok", "", false, 1));
+        when(executor.runReadOnlyPipeline(anyList()))
+                .thenReturn(new ExecResult(0, "[eval] read-only pipeline ok", "", false, 1));
+        when(executor.run(anyList()))
+                .thenReturn(new ExecResult(0, "[eval] dry-run mutation", "", true, 1));
+    }
 
     @Test
     void runScenarioCorpus() throws Exception {
@@ -78,7 +98,7 @@ class ScenarioEvaluationTest {
                     injHit++;
                 }
             }
-            if ("EXECUTED".equals(expected) || "REVIEW_PENDING".equals(expected)) {
+            if ("OBSERVED".equals(expected) || "REVIEW_PENDING".equals(expected)) {
                 benignExpected++;
                 if ("BLOCKED".equals(actual) || "INJECTION_BLOCKED".equals(actual)) {
                     benignFalsePositive++;
@@ -90,10 +110,13 @@ class ScenarioEvaluationTest {
                 cf.setInstruction(instruction);
                 cf.setConfirm(true);
                 cf.setTraceId(resp.getTraceId());
+                if (resp.getDecisions().stream().anyMatch(d -> "IRREVERSIBLE".equals(d.level().name()))) {
+                    cf.setHighImpactConfirmation(OpsPipeline.HIGH_IMPACT_CONFIRMATION);
+                }
                 ChatResponse confirmed = pipeline.chat(cf);
-                if (!"EXECUTED".equals(confirmed.getStatus())) {
+                if (!"DRY_RUN_COMPLETED".equals(confirmed.getStatus())) {
                     ok = false;
-                    failures.add(id + " 确认后期望 EXECUTED 实际 " + confirmed.getStatus());
+                    failures.add(id + " 确认后期望 DRY_RUN_COMPLETED 实际 " + confirmed.getStatus());
                 }
             }
 

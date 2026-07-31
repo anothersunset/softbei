@@ -35,5 +35,20 @@ class StaticFrontendContractTest {
         assertTrue(app.contains("X-Ops-Token"));
         assertTrue(stream.contains("apiFetch('/api/ops/chat/stream"));
         assertTrue(stream.contains("/api/ops/chat/stream"));
+
+        // 链路三色轨道：每个节点读自身信号，不再按顶层 status 分支（见设计文档§1.3）
+        assertTrue(app.contains("function deriveStageStates"));
+        assertTrue(app.contains("function composeExecuteSub"));
+        assertTrue(app.contains("aftermath"));
+        assertTrue(html.contains("id=\"pipeLegend\""));
+        assertTrue(html.contains(".stage.hold"));
+        assertTrue(html.contains(".stage.aftermath"));
+        assertTrue(stream.contains("function applyFinalPipeState"));
+
+        // 威胁指数评分卡：随指令危险度走，与 securityScore（防御履职表现分）互补
+        assertTrue(app.contains("threatAssessment"));
+        assertTrue(app.contains("function threatCardHtml"));
+        assertTrue(app.contains("function legacyScoreCardHtml"));
+        assertTrue(stream.contains("threatAssessment"));
     }
 }
