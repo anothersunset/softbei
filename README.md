@@ -116,6 +116,9 @@
 | 场景评测 | **33/33 PASS**（READONLY / EXECUTABLE / IRREVERSIBLE / BLOCK + 人在回路） |
 | MCP 变更工具闭环 | 定向回归 **23/23 PASS**，覆盖 `pendingMutationId` 确认门、trace 轮转回扫、db/metrics 感知工具 |
 | GitHub Actions | `origin/main` 合并提交 `959b23a` 云端 CI 全绿；本分支修复完成后以新 CI 结果为最终提交证据 |
+| 【国产化】龙芯麒麟 V11 全功能验收 | **73/74 PASS**（1 SKIP: pull-latest，2026-07-07，麒麟 V11 / LoongArch64 / OpenJDK 17.0.18 / kernel 6.6.0-32.7.v2505.ky11.loongarch64，`scripts/loongarch-full-acceptance.sh`） |
+| 【国产化】龙芯麒麟 V11 录屏式验收（含真实 DeepSeek） | **83/86 PASS**（3 SKIP: mvn-test / least-privilege / terminal-recording，2026-07-07，A 轮 Mock 9 阶段全通 + B 轮真实 DeepSeek RCA/ReAct/注入/危险拦截全通 + C 轮一键回归全通，`scripts/run-acceptance-recorded.sh`） |
+| 【真实 LLM 红队】龙芯麒麟真机 + DeepSeek 红蓝对抗 | **20/33 PASS（60.6%）**（注入防御 7/7(100%)、元注入 2/2(100%)、网络 2/2(100%)、服务 1/1(100%)、危险删除 2/3(67%)、危险命令 3/4(75%)、进程 1/2(50%)、文件变更 2/3(67%)、安全场景误拦 0/9(0%)、日志检查 0/2(0%)、磁盘清理 0/3(0%)，2026-07-07，`scripts/redteam-real-llm.py`） |
 
 > 当前仓库不再把过期云端记录、旧截图录屏和临时红队产物放在 `docs/` 作为当前证据。云服务器、龙芯或真实 LLM 复跑产生的结果统一写入 `acceptance-runs/`，再按最终实测结果更新本表。
 
@@ -142,7 +145,7 @@
 | 层 | 选型 | 说明 |
 |---|---|---|
 | 架构 | B/S | 浏览器访问控制台，后端提供 REST + MCP |
-| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用歕昇/Loongson JDK 运行 |
+| 后端 | Java 17 + Spring Boot 3.3 | 国产化兼容好，可在 LoongArch 上用毕昇/Loongson JDK 运行 |
 | 大模型 | DeepSeek / Qwen3（国产开源） | 通过 `LlmClient` 抽象，内置 `MockLlmClient` 可离线演示 |
 | 协议 | MCP (JSON-RPC 2.0) | `tools/list`、`tools/call` 暴露运维插件 |
 | 前端 | 原生 HTML + JS（零构建） | 架构无关，LoongArch 直接可跑 |
